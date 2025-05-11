@@ -29,9 +29,6 @@ Spotyy is an IntelliJ IDEA plugin that lets you control Spotify directly from yo
 - ⏭️ Skip to next track
 - 🔊 Control volume
 - 📋 View currently playing track
-- 📱 See the current playback state
-- 🎵 Browse tracks from current artist
-- 🕰️ Access recently played tracks
 
 ## 📸 Demo
 
