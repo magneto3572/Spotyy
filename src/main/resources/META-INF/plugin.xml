@@ -1,0 +1,18 @@
+<idea-plugin>
+    <id>com.github.magneto3572.spotyy</id>
+    <name>Spotyy</name>
+    <vendor>magneto3572</vendor>
+
+    <description><![CDATA[
+      Spotify controller for IntelliJ IDEA. Control your music without leaving the IDE.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <resource-bundle>messages.MyBundle</resource-bundle>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <statusBarWidgetFactory implementation="com.magneto.spotyy.statusbar.MyStatusBarWidgetFactory"/>
+        <postStartupActivity implementation="com.magneto.spotyy.startup.MyProjectActivity" />
+    </extensions>
+</idea-plugin>
