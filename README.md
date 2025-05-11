@@ -102,7 +102,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Spotify for their amazing music service
 - JetBrains for the IntelliJ Platform SDK
-- All contributors and users of this plugin
 
 ---
 
