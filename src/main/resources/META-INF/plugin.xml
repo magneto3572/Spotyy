@@ -12,7 +12,8 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <statusBarWidgetFactory implementation="com.magneto.spotyy.statusbar.MyStatusBarWidgetFactory"/>
+        <statusBarWidgetFactory id="com.github.magneto3572.spotyy.MyStatusBarWidget"
+                                implementation="com.magneto.spotyy.statusbar.MyStatusBarWidgetFactory"/>
         <postStartupActivity implementation="com.magneto.spotyy.startup.MyProjectActivity" />
     </extensions>
 </idea-plugin>
