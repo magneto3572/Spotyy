@@ -1,4 +1,4 @@
-# 🎵 Spotyy - Spotify Controls for IntelliJ
+# 🎵 Spotyy - Spotify Controls for JetBrains IDEs
 
 ![Spotyy Logo](src/main/resources/META-INF/pluginIcon.svg)
 
@@ -16,13 +16,19 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/IntelliJ%20IDEA-compatible-blue.svg" alt="IntelliJ IDEA Compatible"/>
+  <img src="https://img.shields.io/badge/Android%20Studio-compatible-green.svg" alt="Android Studio Compatible"/>
+  <img src="https://img.shields.io/badge/JetBrains%20IDEs-compatible-orange.svg" alt="JetBrains IDEs Compatible"/>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey" alt="Platform macOS"/>
   <img src="https://img.shields.io/badge/Spotify-integration-1DB954.svg" alt="Spotify Integration"/>
 </p>
 
 ## 🚀 Features
 
-Spotyy is an IntelliJ IDEA plugin that lets you control Spotify directly from your IDE status bar:
+> **⚠️ Important:** This plugin is compatible **ONLY with macOS** and requires the Spotify desktop application to be
+> installed.
+>
+> Spotyy is a plugin for all JetBrains IDEs (IntelliJ IDEA, Android Studio, PyCharm, WebStorm, etc.) that lets you
+> control Spotify directly from your IDE status bar:
 
 - ▶️ Play/pause your music with one click
 - ⏮️ Skip to previous track
@@ -42,17 +48,17 @@ Spotyy is an IntelliJ IDEA plugin that lets you control Spotify directly from yo
 
 ## 💿 Installation
 
-1. Open IntelliJ IDEA
+1. Open any JetBrains IDE (IntelliJ IDEA, Android Studio, PyCharm, etc.)
 2. Go to `Preferences (Settings)` > `Plugins` > `Marketplace`
 3. Search for "**Spotyy**"
 4. Click `Install`
-5. Restart IntelliJ IDEA
+5. Restart your IDE
 
 ## 📝 Requirements
 
-- macOS (currently only supports macOS)
-- Spotify desktop application installed
-- IntelliJ IDEA or other JetBrains IDE
+- **macOS ONLY** - This plugin uses AppleScript to communicate with Spotify and is not compatible with Windows or Linux
+- **Spotify desktop application** must be installed (not just the web player)
+- Any JetBrains IDE (IntelliJ IDEA, Android Studio, PyCharm, WebStorm, etc.)
 
 ## 🎮 Usage
 
@@ -65,7 +71,7 @@ After installation, you'll see a Spotify icon in your status bar at the bottom o
 ## ⚙️ Configuration
 
 No additional configuration is required. The plugin automatically detects your Spotify installation and connects to it
-through AppleScript.
+through AppleScript (macOS only).
 
 ## 🔧 Development
 
