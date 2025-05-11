@@ -61,7 +61,6 @@ After installation, you'll see a Spotify icon in your status bar at the bottom o
 - **Click** on the icon to expand the player controls
 - **Left-click** on the play/pause button to toggle playback
 - Use the **volume slider** to adjust volume
-- **Browse tracks** by clicking on the currently playing song
 
 ## ⚙️ Configuration
 
