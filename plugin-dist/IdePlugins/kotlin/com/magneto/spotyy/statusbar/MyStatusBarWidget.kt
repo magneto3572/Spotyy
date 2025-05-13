@@ -179,6 +179,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         }
 
         controlsPanel.add(spotifyIconLabel)
+        controlsPanel.add(Box.createHorizontalStrut(4))
         controlsPanel.add(trackInfoLabel)
         controlsPanel.add(Box.createHorizontalStrut(6)) // Space between text and controls
         controlsPanel.add(prevButton)

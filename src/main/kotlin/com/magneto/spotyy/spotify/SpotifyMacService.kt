@@ -1,9 +1,16 @@
 package com.magneto.spotyy.spotify
 
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.application.ApplicationManager
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
+
 // Data class to hold track details
 data class TrackInfo(val name: String, val artist: String)
 
 class SpotifyMacService {
+    private val logger = Logger.getInstance(SpotifyMacService::class.java)
+
     fun getCurrentTrack(): SpotifyState {
         val isRunning = isSpotifyRunning()
         val isPlaying = if (isRunning) isPlaying() else false
@@ -419,33 +426,39 @@ class SpotifyMacService {
     }
 
     fun playPause() {
-        runAppleScript(
-            """
-            tell application "Spotify"
-                playpause
-            end tell
-        """.trimIndent()
-        )
+        ApplicationManager.getApplication().executeOnPooledThread {
+            runAppleScript(
+                """
+                tell application "Spotify"
+                    playpause
+                end tell
+            """.trimIndent()
+            )
+        }
     }
 
     fun nextTrack() {
-        runAppleScript(
-            """
-            tell application "Spotify"
-                next track
-            end tell
-        """.trimIndent()
-        )
+        ApplicationManager.getApplication().executeOnPooledThread {
+            runAppleScript(
+                """
+                tell application "Spotify"
+                    next track
+                end tell
+            """.trimIndent()
+            )
+        }
     }
 
     fun previousTrack() {
-        runAppleScript(
-            """
-            tell application "Spotify"
-                previous track
-            end tell
-        """.trimIndent()
-        )
+        ApplicationManager.getApplication().executeOnPooledThread {
+            runAppleScript(
+                """
+                tell application "Spotify"
+                    previous track
+                end tell
+            """.trimIndent()
+            )
+        }
     }
 
     fun getVolume(): Int {
@@ -489,38 +502,59 @@ class SpotifyMacService {
     fun setVolume(volume: Int) {
         val safeVolume = volume.coerceIn(0, 100)
 
-        runAppleScript(
+        ApplicationManager.getApplication().executeOnPooledThread {
+            runAppleScript(
+                """
+                tell application "Spotify"
+                    set sound volume to $safeVolume
+                end tell
             """
-            tell application "Spotify"
-                set sound volume to $safeVolume
-            end tell
-        """
-        )
+            )
+        }
     }
 
     private fun runAppleScript(script: String): String? {
-        return try {
-            val process = Runtime.getRuntime().exec(arrayOf("osascript", "-e", script))
-            // Read the full output from stdout
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            // Read the full output from stderr
-            val error = process.errorStream.bufferedReader().use { it.readText() }
+        val future = CompletableFuture<String?>()
 
-            val exitCode = process.waitFor()
+        val thread = Thread {
+            try {
+                val process = Runtime.getRuntime().exec(arrayOf("osascript", "-e", script))
+                val output = process.inputStream.bufferedReader().use { it.readText() }
+                val error = process.errorStream.bufferedReader().use { it.readText() }
 
-            if (error.isNotBlank()) {
-                System.err.println("AppleScript Error Stream (exit code $exitCode):\n$error")
+                val exitCode = process.waitFor(3, TimeUnit.SECONDS)
+                if (!exitCode) {
+                    process.destroy()
+                    logger.warn("AppleScript execution timed out after 3 seconds")
+                    future.complete(null)
+                    return@Thread
+                }
+
+                if (error.isNotBlank()) {
+                    logger.warn("AppleScript Error: $error")
+                }
+                if (output.startsWith("execution error") || (process.exitValue() != 0 && output.isBlank())) {
+                    logger.warn("AppleScript Execution Error: $output")
+                    future.complete(null)
+                    return@Thread
+                }
+
+                future.complete(output.trim())
+            } catch (e: Exception) {
+                logger.warn("AppleScript execution exception", e)
+                future.completeExceptionally(e)
             }
-            // Even with exitCode 0, AppleScript might return errors in stdout for some commands
-            if (output.startsWith("execution error") || (exitCode != 0 && output.isBlank())) {
-                System.err.println("AppleScript Execution Error (exit code $exitCode) in stdout:\n$output")
-                return null // Indicate failure
-            }
+        }
 
-            output.trim() // Trim trailing newline
+        thread.isDaemon = true
+        thread.start()
+
+        try {
+            return future.get(5, TimeUnit.SECONDS)
         } catch (e: Exception) {
-            e.printStackTrace()
-            null
+            logger.warn("AppleScript execution timed out or was interrupted", e)
+            thread.interrupt()
+            return null
         }
     }
 }
