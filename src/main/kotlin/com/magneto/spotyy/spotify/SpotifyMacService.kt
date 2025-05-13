@@ -17,8 +17,6 @@ class SpotifyMacService {
         val trackInfo = if (isRunning) getTrackInfo() else null
         val volume = if (isRunning) getVolume() else 50
 
-        println("Spotify State: running=$isRunning, playing=$isPlaying, track=$trackInfo, volume=$volume") // Debug log
-
         return SpotifyState(
             isRunning = isRunning,
             isPlaying = isPlaying,
@@ -76,20 +74,28 @@ class SpotifyMacService {
     }
 
     fun getTrackListFromCurrentPlaylist(): List<TrackInfo>? {
-        println("Attempting to get track list from current context")
+        if (logger.isDebugEnabled) {
+            logger.debug("Attempting to get track list from current context")
+        }
 
         // First check if Spotify is running
         if (!isSpotifyRunning()) {
-            println("Spotify is not running")
+            if (logger.isDebugEnabled) {
+                logger.debug("Spotify is not running")
+            }
             return null
         }
 
         // Get the current artist name
         val currentArtist = getCurrentArtistName()
-        println("Current artist: $currentArtist")
+        if (logger.isDebugEnabled) {
+            logger.debug("Current artist: $currentArtist")
+        }
 
         if (currentArtist.isNullOrBlank()) {
-            println("Could not determine current artist")
+            if (logger.isDebugEnabled) {
+                logger.debug("Could not determine current artist")
+            }
             return null
         }
 
@@ -104,7 +110,9 @@ class SpotifyMacService {
     }
 
     private fun getArtistPopularTracks(artistName: String): List<TrackInfo> {
-        println("Getting popular tracks for artist: $artistName")
+        if (logger.isDebugEnabled) {
+            logger.debug("Getting popular tracks for artist: $artistName")
+        }
 
         // This script attempts to get the actual tracks displayed on the artist page
         val scriptOutput = runAppleScript(
@@ -152,7 +160,9 @@ class SpotifyMacService {
         )
 
         if (scriptOutput.isNullOrBlank() || scriptOutput.startsWith("ERROR:")) {
-            println("Error getting popular tracks: $scriptOutput")
+            if (logger.isDebugEnabled) {
+                logger.debug("Error getting popular tracks: $scriptOutput")
+            }
             return emptyList()
         }
 
@@ -161,7 +171,9 @@ class SpotifyMacService {
             if (parts.size == 2) TrackInfo(parts[0], parts[1]) else null
         }.distinctBy { it.name } // Remove duplicates
 
-        println("Found ${tracks.size} popular tracks for artist")
+        if (logger.isDebugEnabled) {
+            logger.debug("Found ${tracks.size} popular tracks for artist")
+        }
         return tracks
     }
 
@@ -180,16 +192,22 @@ class SpotifyMacService {
             """
             )
 
-            println("Retrieved artist name: $result")
+            if (logger.isDebugEnabled) {
+                logger.debug("Retrieved artist name: $result")
+            }
             return if (result.isNullOrBlank()) null else result
         } catch (e: Exception) {
-            println("Error getting artist name: ${e.message}")
+            if (logger.isDebugEnabled) {
+                logger.debug("Error getting artist name: ${e.message}")
+            }
             return null
         }
     }
 
     private fun getSimplifiedArtistSongs(artistName: String): List<TrackInfo> {
-        println("Getting simplified song list for artist: $artistName")
+        if (logger.isDebugEnabled) {
+            logger.debug("Getting simplified song list for artist: $artistName")
+        }
 
         // This is the most reliable script to get songs by an artist
         val scriptOutput = runAppleScript(
@@ -230,7 +248,9 @@ class SpotifyMacService {
         )
 
         if (scriptOutput.isNullOrBlank()) {
-            println("No track results returned from script")
+            if (logger.isDebugEnabled) {
+                logger.debug("No track results returned from script")
+            }
             // Provide fallback songs as last resort
             return getFallbackSongs(artistName)
         }
@@ -240,13 +260,17 @@ class SpotifyMacService {
             if (parts.size == 2) TrackInfo(parts[0], parts[1]) else null
         }
 
-        println("Found ${tracks.size} tracks for artist")
+        if (logger.isDebugEnabled) {
+            logger.debug("Found ${tracks.size} tracks for artist")
+        }
         return if (tracks.isEmpty()) getFallbackSongs(artistName) else tracks
     }
 
     // Provide fallback songs as absolute last resort
     private fun getFallbackSongs(artistName: String): List<TrackInfo> {
-        println("Using fallback songs for artist: $artistName")
+        if (logger.isDebugEnabled) {
+            logger.debug("Using fallback songs for artist: $artistName")
+        }
 
         // Try simple search one more time
         val scriptOutput = runAppleScript(
@@ -277,7 +301,9 @@ class SpotifyMacService {
             }
 
             if (tracks.isNotEmpty()) {
-                println("Found ${tracks.size} fallback tracks")
+                if (logger.isDebugEnabled) {
+                    logger.debug("Found ${tracks.size} fallback tracks")
+                }
                 return tracks
             }
         }
@@ -293,7 +319,9 @@ class SpotifyMacService {
     }
 
     fun getRecentlyPlayedTracks(): List<TrackInfo> {
-        println("Getting recently played tracks")
+        if (logger.isDebugEnabled) {
+            logger.debug("Getting recently played tracks")
+        }
 
         val scriptOutput = runAppleScript(
             """
@@ -377,7 +405,9 @@ class SpotifyMacService {
                 end tell
                 """.trimIndent()
             )
-            println("Popular track result: $scriptOutput")
+            if (logger.isDebugEnabled) {
+                logger.debug("Popular track result: $scriptOutput")
+            }
             return
         }
 

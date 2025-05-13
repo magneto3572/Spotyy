@@ -1,5 +1,6 @@
 package com.magneto.spotyy.statusbar
 
+import com.intellij.ide.ui.LafManagerListener
 import com.magneto.spotyy.spotify.SpotifyMacService
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.util.IconLoader
@@ -26,7 +27,16 @@ class MyStatusBarWidget : CustomStatusBarWidget {
     private val updateTimer: Timer
     private var statusBar: StatusBar? = null
 
-    // Custom panel that overrides hover behavior
+    // Track dark theme state
+    private var isDarkTheme = true
+
+    // Theme listener to update UI when theme changes
+    private val lafListener = LafManagerListener {
+        updateThemeState()
+        updateIconsForTheme()
+        statusBar?.updateWidget(ID())
+    }
+
     private inner class SpotifyStatusBarPanel : JPanel(BorderLayout()) {
         init {
             isOpaque = false
@@ -45,7 +55,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
     }
 
     private val panel = SpotifyStatusBarPanel()
-    private val controlsPanel = JPanel(FlowLayout(FlowLayout.CENTER, 0, 0))
+    private val controlsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0))
     private val trackInfoLabel = JLabel("")
     private val prevButton = JButton()
     private val playPauseButton = JButton()
@@ -60,25 +70,26 @@ class MyStatusBarWidget : CustomStatusBarWidget {
 
     // Icons for controls - load from resources and ensure consistent sizing
     private val iconSize = 16  // Define standard icon size
-    private val prevIcon = IconLoader.findIcon("/icons/left.svg", MyStatusBarWidget::class.java)?.let {
+    private var prevIcon = IconLoader.findIcon("/icons/left_light.svg", MyStatusBarWidget::class.java)?.let {
         IconUtil.toSize(it, iconSize, iconSize)
     }
     private val playIconSize = 18
-    private val playIcon = IconLoader.findIcon("/icons/play.svg", MyStatusBarWidget::class.java)?.let {
+    private var playIcon = IconLoader.findIcon("/icons/play_light.svg", MyStatusBarWidget::class.java)?.let {
         IconUtil.toSize(it, playIconSize, playIconSize)
     }
-    private val pauseIcon = IconLoader.findIcon("/icons/pause.svg", MyStatusBarWidget::class.java)?.let {
+    private var pauseIcon = IconLoader.findIcon("/icons/pause_light.svg", MyStatusBarWidget::class.java)?.let {
         IconUtil.toSize(it, playIconSize, playIconSize)
     }
-    private val nextIcon = IconLoader.findIcon("/icons/right.svg", MyStatusBarWidget::class.java)?.let {
+    private var nextIcon = IconLoader.findIcon("/icons/right_light.svg", MyStatusBarWidget::class.java)?.let {
         IconUtil.toSize(it, iconSize, iconSize)
     }
-    private val volumeIcon = IconLoader.findIcon("/icons/volume.svg", MyStatusBarWidget::class.java)?.let {
+    private var volumeIcon = IconLoader.findIcon("/icons/volume_light.svg", MyStatusBarWidget::class.java)?.let {
         IconUtil.toSize(it, iconSize, iconSize)
     }
-    private val volumeMuteIcon = IconLoader.findIcon("/icons/volume_mute.svg", MyStatusBarWidget::class.java)?.let {
-        IconUtil.toSize(it, iconSize, iconSize)
-    }
+    private var volumeMuteIcon =
+        IconLoader.findIcon("/icons/volume_mute_light.svg", MyStatusBarWidget::class.java)?.let {
+            IconUtil.toSize(it, iconSize, iconSize)
+        }
 
     // Add Spotify icon label 
     private val spotifyIconLabel = JLabel()
@@ -108,10 +119,105 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             }
         }
         updateTimer.start()
+
+        // Initialize theme state
+        updateThemeState()
+
+        // Register theme change listener
+        ApplicationManager.getApplication().messageBus.connect(this)
+            .subscribe(LafManagerListener.TOPIC, lafListener)
     }
 
     private fun isDarkTheme(): Boolean {
-        return true // Always assume dark theme
+        return JBColor.isBright().not() // Check if using dark theme (not bright)
+    }
+
+    private fun updateThemeState() {
+        isDarkTheme = isDarkTheme()
+    }
+
+    private fun updateIconsForTheme() {
+        // Update icons based on current theme
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                // Load appropriate icons for the current theme
+                val iconSuffix = if (isDarkTheme) "_light" else "_dark"
+
+                // Load all icons with the appropriate suffix
+                val newPrevIcon =
+                    IconLoader.getIcon("/icons/left${iconSuffix}.svg", MyStatusBarWidget::class.java)?.let {
+                    IconUtil.toSize(it, iconSize, iconSize)
+                }
+
+                val newPlayIcon =
+                    IconLoader.getIcon("/icons/play${iconSuffix}.svg", MyStatusBarWidget::class.java)?.let {
+                    IconUtil.toSize(it, playIconSize, playIconSize)
+                }
+
+                val newPauseIcon =
+                    IconLoader.getIcon("/icons/pause${iconSuffix}.svg", MyStatusBarWidget::class.java)?.let {
+                    IconUtil.toSize(it, playIconSize, playIconSize)
+                }
+
+                val newNextIcon =
+                    IconLoader.getIcon("/icons/right${iconSuffix}.svg", MyStatusBarWidget::class.java)?.let {
+                    IconUtil.toSize(it, iconSize, iconSize)
+                }
+
+                val newVolumeIcon =
+                    IconLoader.getIcon("/icons/volume${iconSuffix}.svg", MyStatusBarWidget::class.java)?.let {
+                    IconUtil.toSize(it, iconSize, iconSize)
+                }
+
+                val newVolumeMuteIcon =
+                    IconLoader.getIcon("/icons/volume_mute${iconSuffix}.svg", MyStatusBarWidget::class.java)?.let {
+                        IconUtil.toSize(it, iconSize, iconSize)
+                    }
+
+                // Update button icons
+                if (newPrevIcon != null) {
+                    prevButton.icon = newPrevIcon
+                    prevIcon = newPrevIcon
+                }
+                if (newNextIcon != null) {
+                    nextButton.icon = newNextIcon
+                    nextIcon = newNextIcon
+                }
+
+                // Update other icons conditionally based on state
+                if (newPlayIcon != null && newPauseIcon != null) {
+                    val isPlaying = playPauseButton.icon == pauseIcon
+                    playPauseButton.icon = if (isPlaying) newPauseIcon else newPlayIcon
+                    playIcon = newPlayIcon
+                    pauseIcon = newPauseIcon
+                }
+
+                if (newVolumeIcon != null && newVolumeMuteIcon != null) {
+                    val isMuted = volumeButton.icon == volumeMuteIcon
+                    volumeButton.icon = if (isMuted) newVolumeMuteIcon else newVolumeIcon
+                    volumeIcon = newVolumeIcon
+                    volumeMuteIcon = newVolumeMuteIcon
+                }
+
+                // Update spotty icon too
+                val spotyyIconSuffix = if (isDarkTheme) "_light" else "_dark"
+                val newSpotyyIcon =
+                    IconLoader.getIcon("/icons/spotyy_icon${spotyyIconSuffix}.svg", MyStatusBarWidget::class.java)
+                if (newSpotyyIcon != null) {
+                    spotifyIconLabel.icon = newSpotyyIcon
+                    trackInfoLabel.icon = IconUtil.scale(newSpotyyIcon, trackInfoLabel, 0.9f)
+                }
+
+                // Update text color based on theme
+                val textColor = if (isDarkTheme) Color.WHITE else Color.BLACK
+                trackInfoLabel.foreground = textColor
+
+                panel.revalidate()
+                panel.repaint()
+            } catch (e: Exception) {
+                logger.warn("Error updating icons for theme", e)
+            }
+        }
     }
 
     private fun setupUI() {
@@ -137,17 +243,19 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         spotifyIconLabel.border = BorderFactory.createEmptyBorder(0, 8, 0, 10)
         spotifyIconLabel.preferredSize = Dimension(22, 16)
         try {
-            val spotifyIcon = IconLoader.getIcon("/icons/spotify_green.svg", MyStatusBarWidget::class.java)
+            // Get appropriate icon for current theme
+            val iconSuffix = if (isDarkTheme) "_light" else "_dark"
+            val spotifyIcon = IconLoader.getIcon("/icons/spotyy_icon${iconSuffix}.svg", MyStatusBarWidget::class.java)
             spotifyIconLabel.icon = spotifyIcon
         } catch (e: Exception) {
             logger.warn("Failed to load Spotify icon", e)
         }
 
         // Set up track info label
-        trackInfoLabel.border = BorderFactory.createEmptyBorder(0, 0, 0, 35) // Add padding after text
+        trackInfoLabel.border = BorderFactory.createEmptyBorder(0, 0, 0, 0) // Remove extra padding
         trackInfoLabel.maximumSize = Dimension(Short.MAX_VALUE.toInt(), trackInfoLabel.font.size)
         trackInfoLabel.toolTipText = null
-        trackInfoLabel.foreground = Color.WHITE
+        trackInfoLabel.foreground = if (isDarkTheme) Color.WHITE else Color.BLACK
 
         // Configure button colors for dark theme
         val buttonColor = Color.LIGHT_GRAY
@@ -195,22 +303,18 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         separator.background = Color(80, 80, 80)
         separator.foreground = Color(80, 80, 80)
 
-        // Use FlowLayout with proper spacing to match the image
-        controlsPanel.removeAll()
-        controlsPanel.layout = FlowLayout(FlowLayout.CENTER, 0, 0)
-
         // Add components in the right order with proper spacing
-        controlsPanel.add(spotifyIconLabel)
+        controlsPanel.add(Box.createHorizontalStrut(8)) // Start padding
         controlsPanel.add(trackInfoLabel)
-        controlsPanel.add(separator)
-        controlsPanel.add(Box.createHorizontalStrut(30)) // Space between separator and controls
+        controlsPanel.add(Box.createHorizontalStrut(15)) // Reduced gap between text and previous button
         controlsPanel.add(prevButton)
-        controlsPanel.add(Box.createHorizontalStrut(12))
+        controlsPanel.add(Box.createHorizontalStrut(8))
         controlsPanel.add(playPauseButton)
-        controlsPanel.add(Box.createHorizontalStrut(12))
+        controlsPanel.add(Box.createHorizontalStrut(8))
         controlsPanel.add(nextButton)
-        controlsPanel.add(Box.createHorizontalStrut(12))
+        controlsPanel.add(Box.createHorizontalStrut(10))
         controlsPanel.add(volumeButton)
+        controlsPanel.add(Box.createHorizontalStrut(12)) // End padding
 
         panel.add(controlsPanel, BorderLayout.CENTER)
 
@@ -218,7 +322,9 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             component.putClientProperty("JComponent.NO_HOVER", true)
             component.putClientProperty("StatusBar.hoverBackground", null)
             component.putClientProperty("StatusBarWidget.hoverBackground", null)
-            component.border = EmptyBorder(0, 0, 0, 0)
+            if (component != trackInfoLabel) {
+                component.border = EmptyBorder(0, 0, 0, 0)
+            }
         }
     }
 
@@ -485,11 +591,13 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         // Add icon to text label (in addition to the main icon)
         try {
             if (trackInfoLabel.icon == null) {
-                // Scale the icon to fit nicely with text
-                val originalIcon = IconLoader.getIcon("/icons/spotyy_icon.svg", MyStatusBarWidget::class.java)
+                // Get appropriate icon for current theme
+                val iconSuffix = if (isDarkTheme) "_light" else "_dark"
+                val originalIcon =
+                    IconLoader.getIcon("/icons/spotyy_icon${iconSuffix}.svg", MyStatusBarWidget::class.java)
                 val icon = IconUtil.scale(originalIcon, trackInfoLabel, 0.9f)
                 // Position the icon to appear at the beginning of the text
-                trackInfoLabel.setIconTextGap(6)  // Space between icon and text
+                trackInfoLabel.setIconTextGap(10) // Exact gap from screenshot
                 trackInfoLabel.icon = icon
             }
         } catch (e: Exception) {
@@ -516,12 +624,17 @@ class MyStatusBarWidget : CustomStatusBarWidget {
 
     override fun install(statusBar: StatusBar) {
         this.statusBar = statusBar
+        // Initialize with the correct theme
+        updateThemeState()
+        updateIconsForTheme()
     }
 
     override fun dispose() {
         updateTimer.stop()
         cancelPopupDismissTimer()
         dismissVolumePopup()
+        // Clean up theme listener
+        ApplicationManager.getApplication().messageBus.connect().disconnect()
         statusBar = null
         UIManager.put("StatusBarWidget.hoverBackground", null)
     }
