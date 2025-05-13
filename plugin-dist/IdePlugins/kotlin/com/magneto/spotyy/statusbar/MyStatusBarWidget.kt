@@ -178,8 +178,9 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             showVolumeSliderDialog(volumeButton, bounds.x + bounds.width / 2, bounds.y)
         }
 
-        controlsPanel.add(spotifyIconLabel)
         controlsPanel.add(Box.createHorizontalStrut(4))
+        controlsPanel.add(spotifyIconLabel)
+        controlsPanel.add(Box.createHorizontalStrut(12))
         controlsPanel.add(trackInfoLabel)
         controlsPanel.add(Box.createHorizontalStrut(6)) // Space between text and controls
         controlsPanel.add(prevButton)
@@ -443,7 +444,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         val trackInfo = when {
             !state.isRunning -> "Spotyy"
             state.trackInfo == null || state.trackInfo == "Not playing" -> "Spotyy"
-            else -> "Spotyy    |    ${state.trackInfo}"
+            else -> " Spotyy    |    ${state.trackInfo}"
         }
         trackInfoLabel.text = trackInfo
 
