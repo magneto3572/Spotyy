@@ -12,17 +12,43 @@ class SpotifyMacService {
     private val logger = Logger.getInstance(SpotifyMacService::class.java)
 
     fun getCurrentTrack(): SpotifyState {
-        val isRunning = isSpotifyRunning()
-        val isPlaying = if (isRunning) isPlaying() else false
-        val trackInfo = if (isRunning) getTrackInfo() else null
-        val volume = if (isRunning) getVolume() else 50
+        val result = runAppleScript(
+            """
+            set spotifyRunning to false
+            tell application "System Events"
+                set spotifyRunning to (exists process "Spotify")
+            end tell
+            if spotifyRunning then
+                tell application "Spotify"
+                    try
+                        set ps to player state as string
+                        set vol to sound volume as integer
+                        try
+                            set trackArtist to artist of current track
+                            set trackName to name of current track
+                            return "1|" & ps & "|" & vol & "|" & trackArtist & " - " & trackName
+                        on error
+                            return "1|" & ps & "|" & vol & "|"
+                        end try
+                    on error
+                        return "1|stopped|50|"
+                    end try
+                end tell
+            else
+                return "0|stopped|50|"
+            end if
+            """.trimIndent()
+        ) ?: return SpotifyState(false, false, null, 50)
 
-        return SpotifyState(
-            isRunning = isRunning,
-            isPlaying = isPlaying,
-            trackInfo = trackInfo,
-            volume = volume
-        )
+        val parts = result.split("|", limit = 4)
+        if (parts.size < 4) return SpotifyState(false, false, null, 50)
+
+        val isRunning = parts[0] == "1"
+        val isPlaying = parts[1] == "playing"
+        val volume = parts[2].toIntOrNull() ?: 50
+        val trackInfo = parts[3].trim().takeIf { it.isNotBlank() }
+
+        return SpotifyState(isRunning, isPlaying, trackInfo, volume)
     }
 
     private fun isSpotifyRunning(): Boolean {
@@ -55,21 +81,22 @@ class SpotifyMacService {
 
     private fun getTrackInfo(): String? {
         return try {
-            runAppleScript(
+            val result = runAppleScript(
                 """
                 tell application "Spotify"
-                    if player state is playing or player state is paused then
+                    try
                         set currentArtist to artist of current track
                         set currentTrack to name of current track
                         return currentArtist & " - " & currentTrack
-                    else
-                        return "Not playing"
-                    end if
+                    on error
+                        return ""
+                    end try
                 end tell
-            """.trimIndent()
+                """.trimIndent()
             )
+            result?.takeIf { it.isNotBlank() }
         } catch (e: Exception) {
-            "Not playing"
+            null
         }
     }
 
@@ -456,39 +483,33 @@ class SpotifyMacService {
     }
 
     fun playPause() {
-        ApplicationManager.getApplication().executeOnPooledThread {
-            runAppleScript(
-                """
-                tell application "Spotify"
-                    playpause
-                end tell
+        runAppleScript(
+            """
+            tell application "Spotify"
+                playpause
+            end tell
             """.trimIndent()
-            )
-        }
+        )
     }
 
     fun nextTrack() {
-        ApplicationManager.getApplication().executeOnPooledThread {
-            runAppleScript(
-                """
-                tell application "Spotify"
-                    next track
-                end tell
+        runAppleScript(
+            """
+            tell application "Spotify"
+                next track
+            end tell
             """.trimIndent()
-            )
-        }
+        )
     }
 
     fun previousTrack() {
-        ApplicationManager.getApplication().executeOnPooledThread {
-            runAppleScript(
-                """
-                tell application "Spotify"
-                    previous track
-                end tell
+        runAppleScript(
+            """
+            tell application "Spotify"
+                previous track
+            end tell
             """.trimIndent()
-            )
-        }
+        )
     }
 
     fun getVolume(): Int {
