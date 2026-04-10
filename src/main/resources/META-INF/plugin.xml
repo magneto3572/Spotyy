@@ -4,7 +4,49 @@
     <vendor>magneto3572</vendor>
 
     <description><![CDATA[
-      Spotify controller for IntelliJ IDEA. Control your music without leaving the IDE.
+      <h2>Spotyy – Spotify Controls in Your IDE Status Bar</h2>
+
+      <p>
+        Control Spotify playback directly from the bottom status bar of any JetBrains IDE —
+        without switching apps, without breaking your flow.
+      </p>
+
+      <p><b>⚠️ macOS only.</b> Requires the Spotify desktop app (not the web player).</p>
+
+      <h3>Features</h3>
+      <ul>
+        <li>▶️ <b>Play / Pause</b> — toggle playback with one click</li>
+        <li>⏮ <b>Previous track</b> — jump to the previous song</li>
+        <li>⏭ <b>Next track</b> — skip to the next song</li>
+        <li>🔊 <b>Volume control</b> — click the volume icon to open a slider popup; auto-dismisses after 5 seconds</li>
+        <li>🎵 <b>Now Playing</b> — see the current artist and track name live in the status bar</li>
+        <li>🌗 <b>Theme aware</b> — icons and colours adapt automatically to light and dark IDE themes</li>
+        <li>⚡ <b>Non-blocking</b> — all Spotify communication runs on background threads; your IDE stays fast</li>
+      </ul>
+
+      <h3>How to use</h3>
+      <ol>
+        <li>Install the plugin and restart your IDE.</li>
+        <li>Open the <b>Spotify desktop app</b> on your Mac and start playing a song.</li>
+        <li>Open any project — the Spotyy widget appears automatically in the <b>bottom status bar</b>.</li>
+        <li>Use the ⏮ ⏯ ⏭ buttons to control playback and 🔊 to adjust volume.</li>
+        <li>The currently playing track updates every 3 seconds automatically.</li>
+      </ol>
+
+      <h3>Requirements</h3>
+      <ul>
+        <li>macOS (AppleScript is used to communicate with Spotify)</li>
+        <li>Spotify desktop application installed and running</li>
+        <li>Any JetBrains IDE — IntelliJ IDEA, Android Studio, PyCharm, WebStorm, CLion, etc.</li>
+      </ul>
+
+      <h3>Permissions</h3>
+      <p>
+        On first launch macOS may prompt for <b>Automation permission</b> to let the IDE control Spotify.
+        If the widget shows no track info, go to
+        <b>System Settings → Privacy &amp; Security → Automation</b>
+        and enable Spotify access for your IDE.
+      </p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>

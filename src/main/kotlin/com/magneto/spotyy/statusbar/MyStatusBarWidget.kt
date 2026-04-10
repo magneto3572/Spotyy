@@ -203,10 +203,8 @@ class MyStatusBarWidget : CustomStatusBarWidget {
                 val spotyyIconSuffix = if (isDarkTheme) "_light" else "_dark"
                 val newSpotyyIcon =
                     IconLoader.getIcon("/icons/spotyy_icon${spotyyIconSuffix}.svg", MyStatusBarWidget::class.java)
-                if (newSpotyyIcon != null) {
-                    spotifyIconLabel.icon = newSpotyyIcon
-                    trackInfoLabel.icon = IconUtil.scale(newSpotyyIcon, trackInfoLabel, 0.9f)
-                }
+                spotifyIconLabel.icon = newSpotyyIcon
+                trackInfoLabel.icon = IconUtil.scale(newSpotyyIcon, trackInfoLabel, 0.9f)
 
                 // Update text color based on theme
                 val textColor = if (isDarkTheme) Color.WHITE else Color.BLACK
@@ -261,27 +259,15 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         val buttonColor = Color.LIGHT_GRAY
 
         configureControlButton(prevButton, prevIcon, PREV_TEXT) {
-            // Execute the action on a background thread to prevent UI freezing
-            ApplicationManager.getApplication().executeOnPooledThread {
-                spotifyService.previousTrack()
-                updateCurrentTrack()
-            }
+            spotifyService.previousTrack()
         }
 
         configureControlButton(playPauseButton, playIcon, PLAY_TEXT, true) {
-            // Execute the action on a background thread to prevent UI freezing
-            ApplicationManager.getApplication().executeOnPooledThread {
-                spotifyService.playPause()
-                updateCurrentTrack()
-            }
+            spotifyService.playPause()
         }
 
         configureControlButton(nextButton, nextIcon, NEXT_TEXT) {
-            // Execute the action on a background thread to prevent UI freezing
-            ApplicationManager.getApplication().executeOnPooledThread {
-                spotifyService.nextTrack()
-                updateCurrentTrack()
-            }
+            spotifyService.nextTrack()
         }
 
         configureControlButton(volumeButton, volumeIcon, VOLUME_TEXT) {
@@ -318,7 +304,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
 
         panel.add(controlsPanel, BorderLayout.CENTER)
 
-        for (component in arrayOf(panel, controlsPanel, trackInfoLabel, spotifyIconLabel)) {
+        for (component in arrayOf<JComponent>(panel, controlsPanel, trackInfoLabel, spotifyIconLabel)) {
             component.putClientProperty("JComponent.NO_HOVER", true)
             component.putClientProperty("StatusBar.hoverBackground", null)
             component.putClientProperty("StatusBarWidget.hoverBackground", null)
@@ -583,7 +569,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         // Update track info
         val trackInfo = when {
             !state.isRunning -> "Spotyy"
-            state.trackInfo == null || state.trackInfo == "Not playing" -> "Spotyy"
+            state.trackInfo.isNullOrBlank() -> "Spotyy"
             else -> "Spotyy   |   ${state.trackInfo}"
         }
         trackInfoLabel.text = trackInfo
@@ -633,8 +619,8 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         updateTimer.stop()
         cancelPopupDismissTimer()
         dismissVolumePopup()
-        // Clean up theme listener
-        ApplicationManager.getApplication().messageBus.connect().disconnect()
+        // The messageBus connection was created with connect(this), so it is
+        // auto-disposed by IntelliJ when this Disposable is disposed.
         statusBar = null
         UIManager.put("StatusBarWidget.hoverBackground", null)
     }
@@ -758,10 +744,10 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             }
 
             addActionListener {
-                // Execute the action on a background thread to prevent UI freezing
                 ApplicationManager.getApplication().executeOnPooledThread {
                     action()
-                    // Update UI after action is complete
+                    // Wait for Spotify to process the command before reading state back
+                    Thread.sleep(300)
                     updateCurrentTrack()
                 }
             }
