@@ -1,53 +1,75 @@
 <idea-plugin>
     <id>com.github.magneto3572.spotyy</id>
     <name>Spotyy</name>
-    <vendor>magneto3572</vendor>
+    <vendor email="magneto3572@github.com" url="https://github.com/magneto3572/Spotyy">magneto3572</vendor>
 
     <description><![CDATA[
-      <h2>Spotyy – Spotify Controls in Your IDE Status Bar</h2>
+      <h2>Spotyy — Spotify Controls in Your IDE Status Bar</h2>
 
       <p>
-        Control Spotify playback directly from the bottom status bar of any JetBrains IDE —
-        without switching apps, without breaking your flow.
+        Stay in the zone. <b>Spotyy</b> embeds Spotify playback controls directly into the JetBrains
+        status bar so you can manage music without ever leaving your editor.
       </p>
 
-      <p><b>⚠️ macOS only.</b> Requires the Spotify desktop app (not the web player).</p>
+      <p>
+        <b>Note:</b> macOS only — uses AppleScript to communicate with the Spotify desktop app.
+        The Spotify web player is not supported.
+      </p>
+
+      <hr/>
 
       <h3>Features</h3>
       <ul>
-        <li>▶️ <b>Play / Pause</b> — toggle playback with one click</li>
-        <li>⏮ <b>Previous track</b> — jump to the previous song</li>
-        <li>⏭ <b>Next track</b> — skip to the next song</li>
-        <li>🔊 <b>Volume control</b> — click the volume icon to open a slider popup; auto-dismisses after 5 seconds</li>
-        <li>🎵 <b>Now Playing</b> — see the current artist and track name live in the status bar</li>
-        <li>🌗 <b>Theme aware</b> — icons and colours adapt automatically to light and dark IDE themes</li>
-        <li>⚡ <b>Non-blocking</b> — all Spotify communication runs on background threads; your IDE stays fast</li>
+        <li><b>Play / Pause</b> — toggle playback instantly from the status bar</li>
+        <li><b>Previous &amp; Next track</b> — skip or rewind without leaving your IDE</li>
+        <li><b>Volume slider</b> — click the volume icon to open an inline popup slider; auto-dismisses after 5 seconds</li>
+        <li><b>Now Playing</b> — live artist and track name displayed right in the status bar, refreshed every 3 seconds</li>
+        <li><b>Adaptive theming</b> — icons and colours automatically match your IDE's light or dark theme</li>
+        <li><b>Zero performance impact</b> — all Spotify communication runs on background threads; the UI thread is never blocked</li>
       </ul>
 
-      <h3>How to use</h3>
+      <hr/>
+
+      <h3>Getting Started</h3>
       <ol>
-        <li>Install the plugin and restart your IDE.</li>
-        <li>Open the <b>Spotify desktop app</b> on your Mac and start playing a song.</li>
+        <li>Install <b>Spotyy</b> and restart your IDE.</li>
+        <li>Open the <b>Spotify desktop app</b> on your Mac and start playing a track.</li>
         <li>Open any project — the Spotyy widget appears automatically in the <b>bottom status bar</b>.</li>
-        <li>Use the ⏮ ⏯ ⏭ buttons to control playback and 🔊 to adjust volume.</li>
-        <li>The currently playing track updates every 3 seconds automatically.</li>
+        <li>Use the playback buttons to control music and the volume icon to adjust level.</li>
       </ol>
+
+      <hr/>
 
       <h3>Requirements</h3>
       <ul>
-        <li>macOS (AppleScript is used to communicate with Spotify)</li>
-        <li>Spotify desktop application installed and running</li>
-        <li>Any JetBrains IDE — IntelliJ IDEA, Android Studio, PyCharm, WebStorm, CLion, etc.</li>
+        <li>macOS 10.15 Catalina or later</li>
+        <li>Spotify desktop application (installed and running)</li>
+        <li>Any JetBrains IDE: IntelliJ IDEA, Android Studio, PyCharm, WebStorm, CLion, GoLand, Rider, and more</li>
       </ul>
 
       <h3>Permissions</h3>
       <p>
-        On first launch macOS may prompt for <b>Automation permission</b> to let the IDE control Spotify.
-        If the widget shows no track info, go to
+        On first launch, macOS may ask for <b>Automation permission</b> so the IDE can control Spotify.
+        If the widget shows no track information, open
         <b>System Settings → Privacy &amp; Security → Automation</b>
         and enable Spotify access for your IDE.
       </p>
+
+      <hr/>
+
+      <p>
+        Found a bug or have a feature request?
+        <a href="https://github.com/magneto3572/Spotyy/issues">Open an issue on GitHub</a>.
+      </p>
     ]]></description>
+
+    <change-notes><![CDATA[
+      <h2>0.0.5</h2>
+      <ul>
+        <li><b>Broader IDE compatibility</b> — plugin now supports IntelliJ 2022.3+ and Android Studio Giraffe and later; no longer restricted to recent builds</li>
+        <li><b>Review nudge</b> — after 3 days of use, a one-time notification gently asks for a Marketplace review</li>
+      </ul>
+    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
 
@@ -57,5 +79,6 @@
         <statusBarWidgetFactory id="com.github.magneto3572.spotyy.MyStatusBarWidget"
                                 implementation="com.magneto.spotyy.statusbar.MyStatusBarWidgetFactory"/>
         <postStartupActivity implementation="com.magneto.spotyy.startup.MyProjectActivity" />
+        <notificationGroup id="Spotyy" displayType="BALLOON" />
     </extensions>
 </idea-plugin>
