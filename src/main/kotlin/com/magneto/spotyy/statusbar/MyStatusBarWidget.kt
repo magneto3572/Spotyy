@@ -9,6 +9,8 @@ import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.ui.JBColor
 import com.intellij.util.IconUtil
+import com.magneto.spotyy.network.NetworkDiscoveryService
+import com.magneto.spotyy.network.VibeMatch
 import com.magneto.spotyy.spotify.SpotifyState
 import java.awt.*
 import java.awt.event.MouseAdapter
@@ -19,6 +21,7 @@ import java.awt.event.WindowFocusListener
 import javax.swing.*
 import javax.swing.border.EmptyBorder
 import javax.swing.plaf.basic.BasicButtonUI
+import javax.swing.plaf.basic.BasicScrollBarUI
 import javax.swing.plaf.basic.BasicSliderUI
 
 class MyStatusBarWidget : CustomStatusBarWidget {
@@ -68,6 +71,10 @@ class MyStatusBarWidget : CustomStatusBarWidget {
     // Timer for auto-dismissal of volume popup
     private var volumePopupTimer: Timer? = null
 
+    // Peers button and popup
+    private val peersButton = JButton()
+    private var peersDialog: JDialog? = null
+
     // Icons for controls - load from resources and ensure consistent sizing
     private val iconSize = 16  // Define standard icon size
     private var prevIcon = IconLoader.findIcon("/icons/left_light.svg", MyStatusBarWidget::class.java)?.let {
@@ -112,6 +119,8 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             ApplicationManager.getApplication().executeOnPooledThread {
                 // Run Spotify communication on a background thread
                 val state = spotifyService.getCurrentTrack()
+                // Broadcast current playback state to the local network
+                NetworkDiscoveryService.broadcast(state.trackInfo ?: "", state.isPlaying)
                 // Update UI on EDT
                 ApplicationManager.getApplication().invokeLater {
                     updateUIWithState(state)
@@ -283,6 +292,32 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             showVolumeSliderDialog(volumeButton, bounds.x + bounds.width / 2, bounds.y)
         }
 
+        // Peers button — shows who else on the network is listening
+        peersButton.apply {
+            text = "👥"
+            isOpaque = false
+            isBorderPainted = false
+            isContentAreaFilled = false
+            isFocusable = false
+            background = null
+            foreground = if (isDarkTheme) Color.WHITE else Color.BLACK
+            preferredSize = Dimension(44, 28)
+            border = BorderFactory.createEmptyBorder(2, 4, 2, 4)
+            isVisible = false
+            ui = CircularButtonUI(false)
+            putClientProperty("JComponent.NO_HOVER", false)
+            putClientProperty("JButton.arc", 999)
+            addActionListener {
+                ApplicationManager.getApplication().invokeLater {
+                    if (peersDialog?.isVisible == true) {
+                        dismissPeersDialog()
+                    } else {
+                        showPeersDialog(peersButton)
+                    }
+                }
+            }
+        }
+
         // Create a separator before controls
         val separator = JSeparator(SwingConstants.VERTICAL)
         separator.preferredSize = Dimension(1, 16)
@@ -300,6 +335,8 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         controlsPanel.add(nextButton)
         controlsPanel.add(Box.createHorizontalStrut(10))
         controlsPanel.add(volumeButton)
+        controlsPanel.add(Box.createHorizontalStrut(6))
+        controlsPanel.add(peersButton)
         controlsPanel.add(Box.createHorizontalStrut(12)) // End padding
 
         panel.add(controlsPanel, BorderLayout.CENTER)
@@ -602,10 +639,364 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         // Update volume icon based on volume level
         updateVolumeIcon(state.volume)
 
+        // Update peers button — ghost / vibe match / normal / hidden
+        val ghostMode    = NetworkDiscoveryService.isGhostMode()
+        val peers        = NetworkDiscoveryService.getActivePeers()
+        val songMatches  = peers.filter { NetworkDiscoveryService.vibeMatch(it) == VibeMatch.SAME_SONG }
+        val hasSongMatch = songMatches.isNotEmpty()
+
+        // Record any new song-level vibe matches (deduped inside the service)
+        songMatches.forEach { NetworkDiscoveryService.recordVibeMatch(it.username, it.track) }
+
+        when {
+            ghostMode -> {
+                peersButton.text = "👻"
+                peersButton.foreground = if (isDarkTheme) Color(168, 168, 184) else Color(118, 118, 138)
+                peersButton.toolTipText = "Ghost mode — you're invisible"
+                peersButton.isVisible = true
+            }
+            hasSongMatch -> {
+                peersButton.text = "✦ ${peers.size}"
+                peersButton.foreground = if (isDarkTheme) Color(30, 215, 96) else Color(18, 168, 74)
+                peersButton.toolTipText = "Vibing with ${songMatches.first().username}!"
+                peersButton.isVisible = true
+            }
+            peers.isNotEmpty() -> {
+                peersButton.text = "👥 ${peers.size}"
+                peersButton.foreground = if (isDarkTheme) Color.WHITE else Color.BLACK
+                peersButton.toolTipText = "${peers.size} people listening nearby"
+                peersButton.isVisible = true
+            }
+            else -> peersButton.isVisible = false
+        }
+
         ApplicationManager.getApplication().invokeLater {
             panel.revalidate()
             panel.repaint()
         }
+    }
+
+    private fun showPeersDialog(component: Component) {
+        dismissPeersDialog()
+
+        val peers      = NetworkDiscoveryService.getActivePeers()
+        val ghostMode  = NetworkDiscoveryService.isGhostMode()
+        val vibeCount  = NetworkDiscoveryService.getTodayVibeCount()
+        val dark       = isDarkTheme
+
+        // Palette
+        val bg       = if (dark) Color(26, 26, 30)    else Color(251, 251, 253)
+        val border   = if (dark) Color(48, 48, 54)    else Color(216, 216, 224)
+        val sep      = if (dark) Color(40, 40, 46)    else Color(230, 230, 238)
+        val fg       = if (dark) Color(228, 228, 234) else Color(18, 18, 24)
+        val fgMuted  = if (dark) Color(112, 112, 126) else Color(116, 116, 130)
+        val green    = if (dark) Color(30, 215, 96)   else Color(18, 168, 74)
+        val vibeBg   = if (dark) Color(30, 215, 96, 18) else Color(18, 168, 74, 16)
+        val pillOff  = if (dark) Color(62, 62, 72)    else Color(200, 200, 212)
+
+        val avatarPalette = listOf(
+            Color(82, 130, 255), Color(255, 88, 88),  Color(255, 168, 40),
+            Color(160, 90, 255), Color(40, 192, 212), Color(255, 120, 172)
+        )
+
+        fun divider() = object : JComponent() {
+            override fun paintComponent(g: Graphics) { g.color = sep; g.fillRect(0, 0, width, 1) }
+            override fun getPreferredSize() = Dimension(0, 1)
+            override fun getMaximumSize()   = Dimension(Int.MAX_VALUE, 1)
+        }
+
+        // Root panel — rounded + bordered
+        val root = object : JPanel(BorderLayout()) {
+            override fun paintComponent(g: Graphics) {
+                val g2 = g.create() as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.color = bg
+                g2.fillRoundRect(0, 0, width, height, 14, 14)
+                g2.dispose()
+            }
+            override fun paintBorder(g: Graphics) {
+                val g2 = g.create() as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.color = border
+                g2.drawRoundRect(0, 0, width - 1, height - 1, 14, 14)
+                g2.dispose()
+            }
+            override fun isOpaque() = false
+        }
+
+        val stack = JPanel()
+        stack.layout = BoxLayout(stack, BoxLayout.Y_AXIS)
+        stack.isOpaque = false
+        stack.minimumSize = Dimension(280, 0)
+
+        // ── Header ────────────────────────────────────────────────────────────
+        val header = JPanel(BorderLayout())
+        header.isOpaque = false
+        header.border = BorderFactory.createEmptyBorder(13, 14, 13, 14)
+
+        val title = JLabel("Listening nearby")
+        title.foreground = fg
+        title.font = title.font.deriveFont(Font.BOLD, 12f)
+
+        val countLbl = JLabel(if (peers.isEmpty()) "0" else "${peers.size}")
+        countLbl.foreground = if (peers.isNotEmpty()) green else fgMuted
+        countLbl.font = countLbl.font.deriveFont(Font.BOLD, 12f)
+
+        header.add(title,    BorderLayout.WEST)
+        header.add(countLbl, BorderLayout.EAST)
+        stack.add(header)
+        stack.add(divider())
+
+        // ── Vibe stats row (only when > 0) ────────────────────────────────────
+        if (vibeCount > 0) {
+            val vibeRow = object : JPanel(BorderLayout()) {
+                override fun paintComponent(g: Graphics) {
+                    g.color = vibeBg
+                    g.fillRect(0, 0, width, height)
+                }
+                override fun isOpaque() = false
+            }
+            vibeRow.border = BorderFactory.createEmptyBorder(8, 14, 8, 14)
+            vibeRow.maximumSize = Dimension(Int.MAX_VALUE, 34)
+
+            val vibeLabel = JLabel("✦  $vibeCount vibe ${if (vibeCount == 1) "match" else "matches"} today")
+            vibeLabel.foreground = green
+            vibeLabel.font = vibeLabel.font.deriveFont(Font.BOLD, 11f)
+            vibeRow.add(vibeLabel, BorderLayout.WEST)
+            stack.add(vibeRow)
+            stack.add(divider())
+        }
+
+        // ── Peer rows ─────────────────────────────────────────────────────────
+        val peerList = JPanel()
+        peerList.layout = BoxLayout(peerList, BoxLayout.Y_AXIS)
+        peerList.isOpaque = false
+
+        if (peers.isEmpty()) {
+            val row = JPanel(BorderLayout())
+            row.isOpaque = false
+            row.border = BorderFactory.createEmptyBorder(13, 14, 13, 14)
+            val lbl = JLabel("No one else is listening right now")
+            lbl.foreground = fgMuted
+            lbl.font = lbl.font.deriveFont(12f)
+            row.add(lbl, BorderLayout.WEST)
+            peerList.add(row)
+        } else {
+            peers.forEachIndexed { idx, peer ->
+                val match = NetworkDiscoveryService.vibeMatch(peer)
+
+                val row = JPanel(BorderLayout(10, 0))
+                row.isOpaque = false
+                row.border = BorderFactory.createEmptyBorder(9, 14, 9, 14)
+                row.maximumSize = Dimension(Int.MAX_VALUE, 50)
+
+                // Avatar
+                val avatarColor = avatarPalette[Math.abs(peer.username.hashCode()) % avatarPalette.size]
+                val initial     = peer.username.firstOrNull()?.uppercase() ?: "?"
+                val avatar      = object : JComponent() {
+                    override fun paintComponent(g: Graphics) {
+                        val g2 = g.create() as Graphics2D
+                        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                        // Glow ring for song-level match
+                        if (match == VibeMatch.SAME_SONG) {
+                            g2.color = Color(green.red, green.green, green.blue, 60)
+                            g2.fillOval(-2, -2, 32, 32)
+                        }
+                        g2.color = avatarColor
+                        g2.fillOval(0, 0, 28, 28)
+                        g2.color = Color.WHITE
+                        g2.font = g2.font.deriveFont(Font.BOLD, 11f)
+                        val fm = g2.fontMetrics
+                        g2.drawString(initial, (28 - fm.stringWidth(initial)) / 2, (28 - fm.height) / 2 + fm.ascent)
+                        g2.dispose()
+                    }
+                    override fun getPreferredSize() = Dimension(30, 30)
+                }
+                val avatarWrap = JPanel(BorderLayout())
+                avatarWrap.isOpaque = false
+                avatarWrap.preferredSize = Dimension(38, 30)
+                avatarWrap.add(avatar, BorderLayout.WEST)
+
+                // Name + track + vibe tag
+                val info = JPanel(BorderLayout(0, 2))
+                info.isOpaque = false
+
+                val nameLbl = JLabel(peer.username)
+                nameLbl.foreground = fg
+                nameLbl.font = nameLbl.font.deriveFont(Font.BOLD, 12f)
+
+                // Track label + inline vibe badge on same row
+                val trackRow = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0))
+                trackRow.isOpaque = false
+
+                val raw      = peer.track
+                val trackLbl = JLabel(if (raw.length > 28) raw.take(28) + "…" else raw)
+                trackLbl.foreground = fgMuted
+                trackLbl.font = trackLbl.font.deriveFont(11f)
+                trackRow.add(trackLbl)
+
+                when (match) {
+                    VibeMatch.SAME_SONG -> {
+                        val badge = object : JLabel("  ✦ Vibing!") {
+                            override fun paintComponent(g: Graphics) {
+                                val g2 = g.create() as Graphics2D
+                                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                                g2.color = Color(green.red, green.green, green.blue, 28)
+                                g2.fillRoundRect(0, 1, width, height - 2, height - 2, height - 2)
+                                g2.dispose()
+                                super.paintComponent(g)
+                            }
+                        }
+                        badge.foreground = green
+                        badge.font = badge.font.deriveFont(Font.BOLD, 10f)
+                        badge.border = BorderFactory.createEmptyBorder(1, 6, 1, 6)
+                        trackRow.add(Box.createHorizontalStrut(6))
+                        trackRow.add(badge)
+                    }
+                    VibeMatch.SAME_ARTIST -> {
+                        val badge = JLabel("  ∼ Same artist")
+                        badge.foreground = fgMuted
+                        badge.font = badge.font.deriveFont(10f)
+                        trackRow.add(Box.createHorizontalStrut(4))
+                        trackRow.add(badge)
+                    }
+                    VibeMatch.NONE -> {}
+                }
+
+                info.add(nameLbl,  BorderLayout.NORTH)
+                info.add(trackRow, BorderLayout.CENTER)
+
+                row.add(avatarWrap, BorderLayout.WEST)
+                row.add(info,       BorderLayout.CENTER)
+                peerList.add(row)
+                if (idx < peers.size - 1) peerList.add(divider())
+            }
+        }
+
+        // Scroll wrapper — max 5 rows visible, thin scrollbar
+        val maxVisible = 5
+        val rowHeight  = 50
+        if (peers.size > maxVisible) {
+            val scroll = JScrollPane(peerList).apply {
+                preferredSize = Dimension(0, maxVisible * rowHeight)
+                setBorder(BorderFactory.createEmptyBorder())
+                isOpaque = false
+                viewport.isOpaque = false
+                horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+                verticalScrollBarPolicy   = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+                verticalScrollBar.preferredSize = Dimension(4, 0)
+                verticalScrollBar.ui = object : BasicScrollBarUI() {
+                    override fun configureScrollBarColors() {
+                        thumbColor = if (dark) Color(90, 90, 104) else Color(180, 180, 196)
+                        trackColor = Color(0, 0, 0, 0)
+                    }
+                    override fun createDecreaseButton(o: Int) = JButton().apply { preferredSize = Dimension(0, 0) }
+                    override fun createIncreaseButton(o: Int) = JButton().apply { preferredSize = Dimension(0, 0) }
+                }
+            }
+            stack.add(scroll)
+        } else {
+            stack.add(peerList)
+        }
+
+        stack.add(divider())
+
+        // ── Ghost mode toggle ─────────────────────────────────────────────────
+        val ghostRow = JPanel(BorderLayout(12, 0))
+        ghostRow.isOpaque = false
+        ghostRow.border = BorderFactory.createEmptyBorder(12, 14, 12, 14)
+        ghostRow.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+        ghostRow.maximumSize = Dimension(Int.MAX_VALUE, 44)
+
+        val ghostLbl = JLabel("Ghost mode")
+        ghostLbl.foreground = fg
+        ghostLbl.font = ghostLbl.font.deriveFont(Font.PLAIN, 12f)
+
+        val pill = object : JComponent() {
+            override fun paintComponent(g: Graphics) {
+                val g2 = g.create() as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                val on = NetworkDiscoveryService.isGhostMode()
+                g2.color = if (on) green else pillOff
+                g2.fillRoundRect(0, 0, width, height, height, height)
+                val knob = height - 4
+                val kx   = if (on) width - knob - 2 else 2
+                g2.color = Color.WHITE
+                g2.fillOval(kx, 2, knob, knob)
+                g2.dispose()
+            }
+            override fun getPreferredSize() = Dimension(36, 20)
+            override fun isOpaque() = false
+        }
+        pill.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+
+        ghostRow.add(ghostLbl, BorderLayout.CENTER)
+        ghostRow.add(pill,     BorderLayout.EAST)
+
+        val onToggle = object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent) {
+                val newGhost    = !NetworkDiscoveryService.isGhostMode()
+                NetworkDiscoveryService.setGhostMode(newGhost)
+                dismissPeersDialog()
+                val activePeers = NetworkDiscoveryService.getActivePeers()
+                val songMatch   = activePeers.any { NetworkDiscoveryService.vibeMatch(it) == VibeMatch.SAME_SONG }
+                when {
+                    newGhost  -> {
+                        peersButton.text = "👻"
+                        peersButton.foreground = if (isDarkTheme) Color(168, 168, 184) else Color(118, 118, 138)
+                        peersButton.isVisible = true
+                    }
+                    songMatch -> {
+                        peersButton.text = "✦ ${activePeers.size}"
+                        peersButton.foreground = if (isDarkTheme) Color(30, 215, 96) else Color(18, 168, 74)
+                        peersButton.isVisible = true
+                    }
+                    activePeers.isNotEmpty() -> {
+                        peersButton.text = "👥 ${activePeers.size}"
+                        peersButton.foreground = if (isDarkTheme) Color.WHITE else Color.BLACK
+                        peersButton.isVisible = true
+                    }
+                    else -> peersButton.isVisible = false
+                }
+                panel.revalidate()
+                panel.repaint()
+            }
+        }
+        ghostRow.addMouseListener(onToggle)
+        pill.addMouseListener(onToggle)
+        stack.add(ghostRow)
+
+        root.add(stack)
+
+        // ── Dialog ────────────────────────────────────────────────────────────
+        peersDialog = JDialog().apply {
+            isUndecorated = true
+            modalityType  = Dialog.ModalityType.MODELESS
+            background    = Color(0, 0, 0, 0)
+            contentPane   = root
+            rootPane.isOpaque = false
+            rootPane.border   = BorderFactory.createEmptyBorder()
+            pack()
+        }
+
+        val sz     = peersDialog!!.size
+        val screen = Toolkit.getDefaultToolkit().screenSize
+        val loc    = component.locationOnScreen
+        val xPos   = (loc.x - sz.width / 2 + component.width / 2).coerceIn(16, screen.width - sz.width - 16)
+        val yPos   = (loc.y - sz.height - 10).coerceAtLeast(16)
+        peersDialog!!.setLocation(xPos, yPos)
+        peersDialog!!.isVisible = true
+
+        Timer(6000) { dismissPeersDialog() }.apply { isRepeats = false; start() }
+        peersDialog!!.addWindowFocusListener(object : WindowFocusListener {
+            override fun windowGainedFocus(e: WindowEvent?) {}
+            override fun windowLostFocus(e: WindowEvent?) { dismissPeersDialog() }
+        })
+    }
+
+    private fun dismissPeersDialog() {
+        peersDialog?.dispose()
+        peersDialog = null
     }
 
     override fun install(statusBar: StatusBar) {
@@ -619,6 +1010,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         updateTimer.stop()
         cancelPopupDismissTimer()
         dismissVolumePopup()
+        dismissPeersDialog()
         // The messageBus connection was created with connect(this), so it is
         // auto-disposed by IntelliJ when this Disposable is disposed.
         statusBar = null
