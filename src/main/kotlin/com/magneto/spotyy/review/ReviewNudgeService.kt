@@ -4,7 +4,7 @@ import com.intellij.ide.BrowserUtil
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationAction
 import com.intellij.notification.NotificationType
-import com.intellij.openapi.ide.CopyPasteManager
+import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.Project
 import com.intellij.ide.util.PropertiesComponent
 import java.util.concurrent.TimeUnit
@@ -47,12 +47,17 @@ object ReviewNudgeService {
             NotificationType.INFORMATION
         )
 
-        notification.addAction(NotificationAction.createSimpleExpiring("Leave a Review") {
-            BrowserUtil.browse(MARKETPLACE_URL)
+        notification.addAction(object : NotificationAction("Leave a Review") {
+            override fun actionPerformed(e: AnActionEvent, n: Notification) {
+                BrowserUtil.browse(MARKETPLACE_URL)
+                n.expire()
+            }
         })
 
-        notification.addAction(NotificationAction.createSimpleExpiring("No Thanks") {
-            // dismiss — already marked as shown, won't appear again
+        notification.addAction(object : NotificationAction("No Thanks") {
+            override fun actionPerformed(e: AnActionEvent, n: Notification) {
+                n.expire()
+            }
         })
 
         notification.notify(project)
