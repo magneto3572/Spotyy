@@ -31,6 +31,12 @@ object NetworkDiscoveryService {
     @Volatile private var listenerSocket: DatagramSocket? = null
     @Volatile private var running = false
 
+    /**
+     * Set by MyProjectActivity to route SPOTYY_ROOM messages to FocusRoomService
+     * without creating a circular import.
+     */
+    var roomMessageHandler: ((String) -> Unit)? = null
+
     // ── Ghost mode ────────────────────────────────────────────────────────────
 
     fun isGhostMode(): Boolean =
@@ -108,12 +114,39 @@ object NetworkDiscoveryService {
         sendPacket(msg)
     }
 
+    /** Used by FocusRoomService to broadcast room messages on the same socket. */
+    fun sendRoomPacket(msg: String) = sendPacket(msg)
+
+    /**
+     * Returns every subnet broadcast address available on active non-loopback interfaces.
+     * Falls back to 255.255.255.255 if none are found.
+     * Using subnet broadcasts (e.g. 192.168.1.255) instead of 255.255.255.255 is
+     * required because most WiFi routers drop limited-broadcast packets between clients.
+     */
+    private fun getBroadcastAddresses(): List<InetAddress> {
+        val result = mutableListOf<InetAddress>()
+        try {
+            NetworkInterface.getNetworkInterfaces()?.toList()?.forEach { ni ->
+                if (!ni.isUp || ni.isLoopback || ni.isVirtual) return@forEach
+                ni.interfaceAddresses.forEach { ia ->
+                    ia.broadcast?.let { result.add(it) }
+                }
+            }
+        } catch (_: Exception) {}
+        if (result.isEmpty()) result.add(InetAddress.getByName(BROADCAST_ADDR))
+        return result
+    }
+
     private fun sendPacket(msg: String) {
         try {
             val data = msg.toByteArray(Charsets.UTF_8)
             DatagramSocket().use { s ->
                 s.broadcast = true
-                s.send(DatagramPacket(data, data.size, InetAddress.getByName(BROADCAST_ADDR), PORT))
+                for (addr in getBroadcastAddresses()) {
+                    try {
+                        s.send(DatagramPacket(data, data.size, addr, PORT))
+                    } catch (_: Exception) {}
+                }
             }
         } catch (_: Exception) {}
     }
@@ -161,6 +194,12 @@ object NetworkDiscoveryService {
     }
 
     private fun parseAndStore(msg: String) {
+        // Route Focus Room messages to FocusRoomService via callback
+        if (msg.startsWith("SPOTYY_ROOM")) {
+            roomMessageHandler?.invoke(msg)
+            return
+        }
+
         val parts = msg.split("|")
         if (parts.size < 4 || parts[0] != PREFIX) return
         val name      = parts[1].trim()

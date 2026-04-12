@@ -9,6 +9,8 @@ import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.ui.JBColor
 import com.intellij.util.IconUtil
+import com.magneto.spotyy.focus.FocusRoomService
+import com.magneto.spotyy.focus.RoomMember
 import com.magneto.spotyy.network.NetworkDiscoveryService
 import com.magneto.spotyy.network.VibeMatch
 import com.magneto.spotyy.spotify.SpotifyState
@@ -74,6 +76,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
     // Peers button and popup
     private val peersButton = JButton()
     private var peersDialog: JDialog? = null
+    private var popupRefreshTimer: Timer? = null
 
     // Icons for controls - load from resources and ensure consistent sizing
     private val iconSize = 16  // Define standard icon size
@@ -121,6 +124,8 @@ class MyStatusBarWidget : CustomStatusBarWidget {
                 val state = spotifyService.getCurrentTrack()
                 // Broadcast current playback state to the local network
                 NetworkDiscoveryService.broadcast(state.trackInfo ?: "", state.isPlaying)
+                // Ping Focus Room (keeps membership alive + expires room when timer ends)
+                FocusRoomService.ping()
                 // Update UI on EDT
                 ApplicationManager.getApplication().invokeLater {
                     updateUIWithState(state)
@@ -259,7 +264,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         }
 
         // Set up track info label
-        trackInfoLabel.border = BorderFactory.createEmptyBorder(0, 0, 0, 0) // Remove extra padding
+        trackInfoLabel.border = BorderFactory.createEmptyBorder(0, 0, 0, 0)
         trackInfoLabel.maximumSize = Dimension(Short.MAX_VALUE.toInt(), trackInfoLabel.font.size)
         trackInfoLabel.toolTipText = null
         trackInfoLabel.foreground = if (isDarkTheme) Color.WHITE else Color.BLACK
@@ -301,10 +306,10 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             isFocusable = false
             background = null
             foreground = if (isDarkTheme) Color.WHITE else Color.BLACK
-            preferredSize = Dimension(44, 28)
-            border = BorderFactory.createEmptyBorder(2, 4, 2, 4)
+            // No fixed preferredSize — let the button grow to fit its text (timer can be wide)
+            border = BorderFactory.createEmptyBorder(3, 8, 3, 8)
             isVisible = false
-            ui = CircularButtonUI(false)
+            ui = PillButtonUI()
             putClientProperty("JComponent.NO_HOVER", false)
             putClientProperty("JButton.arc", 999)
             addActionListener {
@@ -649,6 +654,15 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         songMatches.forEach { NetworkDiscoveryService.recordVibeMatch(it.username, it.track) }
 
         when {
+            // Always show when in a Focus Room so guests can see timer and leave
+            FocusRoomService.isInRoom -> {
+                val room        = FocusRoomService.currentRoom
+                val memberCount = room?.members?.size ?: 1
+                peersButton.text        = "⏱ ${room?.formattedTime() ?: "00:00"}"
+                peersButton.foreground  = if (isDarkTheme) Color(30, 215, 96) else Color(18, 168, 74)
+                peersButton.toolTipText = "Focus Room · $memberCount member${if (memberCount != 1) "s" else ""}"
+                peersButton.isVisible   = true
+            }
             ghostMode -> {
                 peersButton.text = "👻"
                 peersButton.foreground = if (isDarkTheme) Color(168, 168, 184) else Color(118, 118, 138)
@@ -724,15 +738,21 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             override fun isOpaque() = false
         }
 
-        val stack = JPanel()
+        val popupWidth = 300
+        val stack = object : JPanel() {
+            override fun getPreferredSize() = Dimension(popupWidth, super.getPreferredSize().height)
+            override fun getMaximumSize()   = Dimension(popupWidth, Int.MAX_VALUE)
+            override fun getMinimumSize()   = Dimension(popupWidth, 0)
+        }
         stack.layout = BoxLayout(stack, BoxLayout.Y_AXIS)
         stack.isOpaque = false
-        stack.minimumSize = Dimension(280, 0)
 
         // ── Header ────────────────────────────────────────────────────────────
         val header = JPanel(BorderLayout())
         header.isOpaque = false
         header.border = BorderFactory.createEmptyBorder(13, 14, 13, 14)
+        header.minimumSize = Dimension(popupWidth, 0)
+        header.maximumSize = Dimension(popupWidth, Int.MAX_VALUE)
 
         val title = JLabel("Listening nearby")
         title.foreground = fg
@@ -757,7 +777,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
                 override fun isOpaque() = false
             }
             vibeRow.border = BorderFactory.createEmptyBorder(8, 14, 8, 14)
-            vibeRow.maximumSize = Dimension(Int.MAX_VALUE, 34)
+            vibeRow.maximumSize = Dimension(popupWidth, 34)
 
             val vibeLabel = JLabel("✦  $vibeCount vibe ${if (vibeCount == 1) "match" else "matches"} today")
             vibeLabel.foreground = green
@@ -776,6 +796,8 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             val row = JPanel(BorderLayout())
             row.isOpaque = false
             row.border = BorderFactory.createEmptyBorder(13, 14, 13, 14)
+            row.minimumSize = Dimension(popupWidth, 0)
+            row.maximumSize = Dimension(popupWidth, Int.MAX_VALUE)
             val lbl = JLabel("No one else is listening right now")
             lbl.foreground = fgMuted
             lbl.font = lbl.font.deriveFont(12f)
@@ -788,7 +810,8 @@ class MyStatusBarWidget : CustomStatusBarWidget {
                 val row = JPanel(BorderLayout(10, 0))
                 row.isOpaque = false
                 row.border = BorderFactory.createEmptyBorder(9, 14, 9, 14)
-                row.maximumSize = Dimension(Int.MAX_VALUE, 50)
+                row.minimumSize = Dimension(popupWidth, 0)
+                row.maximumSize = Dimension(popupWidth, 50)
 
                 // Avatar
                 val avatarColor = avatarPalette[Math.abs(peer.username.hashCode()) % avatarPalette.size]
@@ -829,10 +852,22 @@ class MyStatusBarWidget : CustomStatusBarWidget {
                 val trackRow = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0))
                 trackRow.isOpaque = false
 
-                val raw      = peer.track
-                val trackLbl = JLabel(if (raw.length > 28) raw.take(28) + "…" else raw)
+                val raw       = peer.track
+                // Budget: popupWidth - rowPadding(28) - avatar(38) - hgaps(20) - inviteBtn(74 if host) - fudge(4)
+                val hasInviteBtn = FocusRoomService.isHost && FocusRoomService.isInRoom
+                val maxTrackPx   = popupWidth - 28 - 38 - 20 - (if (hasInviteBtn) 74 else 0) - 4
+                val trackFont    = (UIManager.getFont("Label.font") ?: Font("SansSerif", Font.PLAIN, 11)).deriveFont(11f)
+                val tmpLbl       = JLabel()
+                val fm           = tmpLbl.getFontMetrics(trackFont)
+                val truncated    = if (fm.stringWidth(raw) <= maxTrackPx) raw
+                                   else {
+                                       var t = raw
+                                       while (t.isNotEmpty() && fm.stringWidth("$t…") > maxTrackPx) t = t.dropLast(1)
+                                       "$t…"
+                                   }
+                val trackLbl = JLabel(truncated)
                 trackLbl.foreground = fgMuted
-                trackLbl.font = trackLbl.font.deriveFont(11f)
+                trackLbl.font = trackFont
                 trackRow.add(trackLbl)
 
                 when (match) {
@@ -868,6 +903,45 @@ class MyStatusBarWidget : CustomStatusBarWidget {
 
                 row.add(avatarWrap, BorderLayout.WEST)
                 row.add(info,       BorderLayout.CENTER)
+
+                // Invite button — only visible to the host when a room is active
+                if (FocusRoomService.isHost && FocusRoomService.isInRoom) {
+                    val alreadyInRoom = FocusRoomService.currentRoom?.members?.containsKey(peer.username) == true
+                    val inviteBtn = JButton(if (alreadyInRoom) "✓ Joined" else "Invite")
+                    inviteBtn.apply {
+                        isOpaque = false
+                        isBorderPainted = true
+                        isContentAreaFilled = false
+                        isFocusable = false
+                        isEnabled = !alreadyInRoom
+                        font = font.deriveFont(Font.BOLD, 10f)
+                        foreground = if (alreadyInRoom) fgMuted else green
+                        setBorder(BorderFactory.createCompoundBorder(
+                            BorderFactory.createLineBorder(if (alreadyInRoom) fgMuted else green, 1, true),
+                            BorderFactory.createEmptyBorder(3, 8, 3, 8)
+                        ))
+                        preferredSize = Dimension(64, 24)
+                        addActionListener {
+                            // Update UI immediately on EDT
+                            isEnabled = false
+                            text = "Sent"
+                            foreground = fgMuted
+                            setBorder(BorderFactory.createCompoundBorder(
+                                BorderFactory.createLineBorder(fgMuted, 1, true),
+                                BorderFactory.createEmptyBorder(3, 8, 3, 8)
+                            ))
+                            // Send invite packet on background thread — never do network I/O on EDT
+                            ApplicationManager.getApplication().executeOnPooledThread {
+                                FocusRoomService.invitePeer(peer.username)
+                            }
+                        }
+                    }
+                    val btnWrap = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0))
+                    btnWrap.isOpaque = false
+                    btnWrap.add(inviteBtn)
+                    row.add(btnWrap, BorderLayout.EAST)
+                }
+
                 peerList.add(row)
                 if (idx < peers.size - 1) peerList.add(divider())
             }
@@ -901,22 +975,334 @@ class MyStatusBarWidget : CustomStatusBarWidget {
 
         stack.add(divider())
 
+        // ── Focus Room ────────────────────────────────────────────────────────
+        val room = FocusRoomService.currentRoom
+        val red  = if (dark) Color(220, 80, 80) else Color(200, 50, 50)
+        // Declared here so the refresh timer closure can reference them regardless of room state
+        var timerLbl = JLabel("")
+        val nearbyTimerLabels = mutableListOf<Pair<com.magneto.spotyy.focus.NearbyRoom, JLabel>>()
+
+        if (room != null) {
+            val me = NetworkDiscoveryService.localUsername
+
+            // Header — title left, live timer right
+            val roomHeader = JPanel(BorderLayout())
+            roomHeader.isOpaque = false
+            roomHeader.border = BorderFactory.createEmptyBorder(12, 14, 8, 14)
+            roomHeader.minimumSize = Dimension(popupWidth, 0)
+            roomHeader.maximumSize = Dimension(popupWidth, Int.MAX_VALUE)
+
+            val roomTitle = JLabel("Focus Room")
+            roomTitle.foreground = fg
+            roomTitle.font = roomTitle.font.deriveFont(Font.BOLD, 12f)
+
+            timerLbl = JLabel(room.formattedTime())
+            timerLbl.foreground = green
+            timerLbl.font = timerLbl.font.deriveFont(Font.BOLD, 12f)
+
+            roomHeader.add(roomTitle, BorderLayout.WEST)
+            roomHeader.add(timerLbl,  BorderLayout.EAST)
+            stack.add(roomHeader)
+
+            // Member list with avatars + kick button for host
+            val memberPanel = JPanel()
+            memberPanel.layout = BoxLayout(memberPanel, BoxLayout.Y_AXIS)
+            memberPanel.isOpaque = false
+            memberPanel.border = BorderFactory.createEmptyBorder(4, 0, 4, 0)
+
+            room.members.values.sortedWith(
+                compareByDescending<RoomMember> { it.username == room.hostName }
+                    .thenBy { it.username }
+            ).forEach { member ->
+                val isMe      = member.username == me
+                val isMbrHost = member.username == room.hostName
+
+                val mRow = JPanel(BorderLayout(10, 0))
+                mRow.isOpaque = false
+                mRow.border = BorderFactory.createEmptyBorder(6, 14, 6, 14)
+                mRow.minimumSize = Dimension(popupWidth, 0)
+                mRow.maximumSize = Dimension(popupWidth, 42)
+
+                // Avatar circle
+                val aColor  = avatarPalette[Math.abs(member.username.hashCode()) % avatarPalette.size]
+                val initial = member.username.firstOrNull()?.uppercase() ?: "?"
+                val avatar  = object : JComponent() {
+                    override fun paintComponent(g: Graphics) {
+                        val g2 = g.create() as Graphics2D
+                        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                        g2.color = if (isMe) Color(green.red, green.green, green.blue, 160) else aColor
+                        g2.fillOval(0, 0, 28, 28)
+                        g2.color = Color.WHITE
+                        g2.font = g2.font.deriveFont(Font.BOLD, 11f)
+                        val fm = g2.fontMetrics
+                        g2.drawString(initial, (28 - fm.stringWidth(initial)) / 2, (28 - fm.height) / 2 + fm.ascent)
+                        g2.dispose()
+                    }
+                    override fun getPreferredSize() = Dimension(28, 28)
+                }
+                val avatarWrap = JPanel(BorderLayout())
+                avatarWrap.isOpaque = false
+                avatarWrap.preferredSize = Dimension(36, 28)
+                avatarWrap.add(avatar, BorderLayout.WEST)
+
+                // Name + role tag
+                val nameInfo = JPanel()
+                nameInfo.layout = BoxLayout(nameInfo, BoxLayout.Y_AXIS)
+                nameInfo.isOpaque = false
+
+                val nameLbl = JLabel(member.username)
+                nameLbl.foreground = if (isMe) green else fg
+                nameLbl.font = nameLbl.font.deriveFont(Font.BOLD, 11f)
+                nameLbl.alignmentX = 0f
+
+                val tag = when {
+                    isMbrHost && isMe -> "host · you"
+                    isMbrHost         -> "host"
+                    isMe              -> "you"
+                    else              -> null
+                }
+                nameInfo.add(nameLbl)
+                if (tag != null) {
+                    val tagLbl = JLabel(tag)
+                    tagLbl.foreground = fgMuted
+                    tagLbl.font = tagLbl.font.deriveFont(9f)
+                    tagLbl.alignmentX = 0f
+                    nameInfo.add(tagLbl)
+                }
+
+                mRow.add(avatarWrap, BorderLayout.WEST)
+                mRow.add(nameInfo,   BorderLayout.CENTER)
+
+                // Kick button — host only, not for self
+                if (FocusRoomService.isHost && !isMe) {
+                    val kickLbl = JLabel("Remove")
+                    kickLbl.foreground = red
+                    kickLbl.font = kickLbl.font.deriveFont(Font.PLAIN, 10f)
+                    kickLbl.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                    kickLbl.toolTipText = "Remove ${member.username} from the room"
+                    kickLbl.addMouseListener(object : MouseAdapter() {
+                        override fun mouseClicked(e: MouseEvent) {
+                            ApplicationManager.getApplication().executeOnPooledThread {
+                                FocusRoomService.kickPeer(member.username)
+                            }
+                            refreshPeersDialog()
+                        }
+                        override fun mouseEntered(e: MouseEvent) {
+                            kickLbl.foreground = Color(255, 100, 100)
+                        }
+                        override fun mouseExited(e: MouseEvent) {
+                            kickLbl.foreground = red
+                        }
+                    })
+                    val kickWrap = JPanel(FlowLayout(FlowLayout.RIGHT, 0, 0))
+                    kickWrap.isOpaque = false
+                    kickWrap.add(kickLbl)
+                    mRow.add(kickWrap, BorderLayout.EAST)
+                }
+
+                memberPanel.add(mRow)
+            }
+            stack.add(memberPanel)
+            stack.add(divider())
+
+            // Leave / End button
+            val actionRow = JPanel(BorderLayout())
+            actionRow.isOpaque = false
+            actionRow.border = BorderFactory.createEmptyBorder(10, 14, 10, 14)
+            actionRow.minimumSize = Dimension(popupWidth, 0)
+            actionRow.maximumSize = Dimension(popupWidth, Int.MAX_VALUE)
+
+            val actionLabel = if (FocusRoomService.isHost) "End Room" else "Leave Room"
+            val leaveBtn = object : JLabel(actionLabel, SwingConstants.CENTER) {
+                override fun paintComponent(g: Graphics) {
+                    val g2 = g.create() as Graphics2D
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                    g2.color = Color(red.red, red.green, red.blue, 18)
+                    g2.fillRoundRect(0, 0, width, height, 8, 8)
+                    g2.dispose()
+                    super.paintComponent(g)
+                }
+            }
+            leaveBtn.foreground = red
+            leaveBtn.font = leaveBtn.font.deriveFont(Font.BOLD, 11f)
+            leaveBtn.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color(red.red, red.green, red.blue, 80), 1, true),
+                BorderFactory.createEmptyBorder(6, 16, 6, 16)
+            ))
+            leaveBtn.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+            leaveBtn.addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(e: MouseEvent) {
+                    ApplicationManager.getApplication().executeOnPooledThread {
+                        FocusRoomService.leaveRoom()
+                    }
+                    dismissPeersDialog()
+                    ApplicationManager.getApplication().invokeLater { panel.revalidate(); panel.repaint() }
+                }
+            })
+            actionRow.add(leaveBtn, BorderLayout.CENTER)
+            stack.add(actionRow)
+
+        } else {
+            // ── Nearby Focus Rooms (visible to non-members) ───────────────────────
+            val nearbyList = FocusRoomService.getNearbyRooms()
+            if (nearbyList.isNotEmpty()) {
+                val nearbyHeader = JPanel(BorderLayout())
+                nearbyHeader.isOpaque = false
+                nearbyHeader.border = BorderFactory.createEmptyBorder(12, 14, 6, 14)
+                nearbyHeader.minimumSize = Dimension(popupWidth, 0)
+                nearbyHeader.maximumSize = Dimension(popupWidth, Int.MAX_VALUE)
+
+                val nearbyTitle = JLabel("Focus Room Nearby")
+                nearbyTitle.foreground = fg
+                nearbyTitle.font = nearbyTitle.font.deriveFont(Font.BOLD, 12f)
+
+                val lockLbl = JLabel("invite only")
+                lockLbl.foreground = fgMuted
+                lockLbl.font = lockLbl.font.deriveFont(10f)
+
+                nearbyHeader.add(nearbyTitle, BorderLayout.WEST)
+                nearbyHeader.add(lockLbl, BorderLayout.EAST)
+                stack.add(nearbyHeader)
+
+                nearbyList.forEach { nRoom ->
+                    val nRow = JPanel(BorderLayout(10, 0))
+                    nRow.isOpaque = false
+                    nRow.border = BorderFactory.createEmptyBorder(6, 14, 8, 14)
+                    nRow.minimumSize = Dimension(popupWidth, 0)
+                    nRow.maximumSize = Dimension(popupWidth, 46)
+
+                    val aColor  = avatarPalette[Math.abs(nRoom.hostName.hashCode()) % avatarPalette.size]
+                    val initial = nRoom.hostName.firstOrNull()?.uppercase() ?: "?"
+                    val avatar = object : JComponent() {
+                        override fun paintComponent(g: Graphics) {
+                            val g2 = g.create() as Graphics2D
+                            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                            g2.color = aColor.darker()
+                            g2.fillOval(0, 0, 28, 28)
+                            g2.color = Color.WHITE
+                            g2.font = g2.font.deriveFont(Font.BOLD, 11f)
+                            val fmA = g2.fontMetrics
+                            g2.drawString(initial, (28 - fmA.stringWidth(initial)) / 2, (28 - fmA.height) / 2 + fmA.ascent)
+                            g2.dispose()
+                        }
+                        override fun getPreferredSize() = Dimension(30, 30)
+                    }
+                    val avatarWrap = JPanel(BorderLayout())
+                    avatarWrap.isOpaque = false
+                    avatarWrap.preferredSize = Dimension(38, 30)
+                    avatarWrap.add(avatar, BorderLayout.WEST)
+
+                    val info = JPanel(BorderLayout(0, 2))
+                    info.isOpaque = false
+
+                    val hostLbl = JLabel("${nRoom.hostName}'s room")
+                    hostLbl.foreground = fg
+                    hostLbl.font = hostLbl.font.deriveFont(Font.BOLD, 12f)
+
+                    val memberCount = nRoom.seenMembers.size
+                    val subLbl = JLabel("$memberCount ${if (memberCount == 1) "member" else "members"} · ask to be invited")
+                    subLbl.foreground = fgMuted
+                    subLbl.font = subLbl.font.deriveFont(10f)
+
+                    info.add(hostLbl, BorderLayout.NORTH)
+                    info.add(subLbl, BorderLayout.CENTER)
+
+                    val nTimerLbl = JLabel(nRoom.formattedTime())
+                    nTimerLbl.foreground = fgMuted
+                    nTimerLbl.font = nTimerLbl.font.deriveFont(Font.BOLD, 11f)
+                    nearbyTimerLabels.add(Pair(nRoom, nTimerLbl))
+
+                    nRow.add(avatarWrap, BorderLayout.WEST)
+                    nRow.add(info, BorderLayout.CENTER)
+                    nRow.add(nTimerLbl, BorderLayout.EAST)
+                    stack.add(nRow)
+                }
+                stack.add(divider())
+            }
+
+            // No active room — show "Start Focus Room" with duration buttons
+            val startRow = JPanel(BorderLayout(8, 0))
+            startRow.isOpaque = false
+            startRow.border = BorderFactory.createEmptyBorder(12, 14, 12, 14)
+            startRow.minimumSize = Dimension(popupWidth, 0)
+            startRow.maximumSize = Dimension(popupWidth, Int.MAX_VALUE)
+
+            val startLbl = JLabel("Focus Room")
+            startLbl.foreground = fgMuted
+            startLbl.font = startLbl.font.deriveFont(12f)
+
+            val btnPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 5, 0))
+            btnPanel.isOpaque = false
+
+            listOf(25, 45, 60).forEach { mins ->
+                val pillColor = pillOff
+                val btn = object : JLabel("${mins}m", SwingConstants.CENTER) {
+                    override fun paintComponent(g: Graphics) {
+                        val g2 = g.create() as Graphics2D
+                        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                        g2.color = pillColor
+                        g2.fillRoundRect(0, 0, width, height, height, height)
+                        g2.dispose()
+                        super.paintComponent(g)
+                    }
+                }
+                btn.foreground = fg
+                btn.font = btn.font.deriveFont(Font.BOLD, 10f)
+                btn.border = BorderFactory.createEmptyBorder(3, 8, 3, 8)
+                btn.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                btn.addMouseListener(object : MouseAdapter() {
+                    override fun mouseClicked(e: MouseEvent) {
+                        FocusRoomService.startRoom(mins)
+                        panel.revalidate(); panel.repaint()
+                        refreshPeersDialog()
+                    }
+                })
+                btnPanel.add(btn)
+            }
+
+            startRow.add(startLbl, BorderLayout.WEST)
+            startRow.add(btnPanel, BorderLayout.EAST)
+            stack.add(startRow)
+        }
+
+        stack.add(divider())
+
         // ── Ghost mode toggle ─────────────────────────────────────────────────
-        val ghostRow = JPanel(BorderLayout(12, 0))
+        val inRoom      = FocusRoomService.isInRoom
+        val ghostRow    = JPanel(BorderLayout(12, 0))
         ghostRow.isOpaque = false
         ghostRow.border = BorderFactory.createEmptyBorder(12, 14, 12, 14)
-        ghostRow.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-        ghostRow.maximumSize = Dimension(Int.MAX_VALUE, 44)
+        ghostRow.cursor = if (inRoom) Cursor.getDefaultCursor() else Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+        ghostRow.minimumSize = Dimension(popupWidth, 0)
+        ghostRow.maximumSize = Dimension(popupWidth, 44)
+
+        // Label — show reason when locked
+        val ghostLblPanel = JPanel()
+        ghostLblPanel.layout = BoxLayout(ghostLblPanel, BoxLayout.Y_AXIS)
+        ghostLblPanel.isOpaque = false
 
         val ghostLbl = JLabel("Ghost mode")
-        ghostLbl.foreground = fg
+        ghostLbl.foreground = if (inRoom) fgMuted else fg
         ghostLbl.font = ghostLbl.font.deriveFont(Font.PLAIN, 12f)
+        ghostLbl.alignmentX = 0f
+        ghostLblPanel.add(ghostLbl)
+
+        if (inRoom) {
+            val lockedHint = JLabel("Leave the room first")
+            lockedHint.foreground = fgMuted
+            lockedHint.font = lockedHint.font.deriveFont(9f)
+            lockedHint.alignmentX = 0f
+            ghostLblPanel.add(lockedHint)
+        }
 
         val pill = object : JComponent() {
             override fun paintComponent(g: Graphics) {
                 val g2 = g.create() as Graphics2D
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
                 val on = NetworkDiscoveryService.isGhostMode()
+                // Dim the pill when locked inside a room (live check so it reflects state changes)
+                val alpha = if (FocusRoomService.isInRoom) 0.35f else 1.0f
+                g2.composite = java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, alpha)
                 g2.color = if (on) green else pillOff
                 g2.fillRoundRect(0, 0, width, height, height, height)
                 val knob = height - 4
@@ -928,16 +1314,18 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             override fun getPreferredSize() = Dimension(36, 20)
             override fun isOpaque() = false
         }
-        pill.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+        if (!inRoom) pill.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
 
-        ghostRow.add(ghostLbl, BorderLayout.CENTER)
-        ghostRow.add(pill,     BorderLayout.EAST)
+        ghostRow.add(ghostLblPanel, BorderLayout.CENTER)
+        ghostRow.add(pill,          BorderLayout.EAST)
 
         val onToggle = object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
+                // Hard runtime guard — re-check at click time, not just at dialog-open time
+                if (FocusRoomService.isInRoom) return
                 val newGhost    = !NetworkDiscoveryService.isGhostMode()
                 NetworkDiscoveryService.setGhostMode(newGhost)
-                dismissPeersDialog()
+                refreshPeersDialog()
                 val activePeers = NetworkDiscoveryService.getActivePeers()
                 val songMatch   = activePeers.any { NetworkDiscoveryService.vibeMatch(it) == VibeMatch.SAME_SONG }
                 when {
@@ -977,6 +1365,9 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             rootPane.isOpaque = false
             rootPane.border   = BorderFactory.createEmptyBorder()
             pack()
+            // Force exact width — pack() can under-report on some platforms
+            setSize(popupWidth, preferredSize.height)
+            minimumSize = Dimension(popupWidth, 1)
         }
 
         val sz     = peersDialog!!.size
@@ -987,16 +1378,86 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         peersDialog!!.setLocation(xPos, yPos)
         peersDialog!!.isVisible = true
 
-        Timer(6000) { dismissPeersDialog() }.apply { isRepeats = false; start() }
+        // Close only when the user clicks outside into another window — not on internal interactions
         peersDialog!!.addWindowFocusListener(object : WindowFocusListener {
             override fun windowGainedFocus(e: WindowEvent?) {}
-            override fun windowLostFocus(e: WindowEvent?) { dismissPeersDialog() }
+            override fun windowLostFocus(e: WindowEvent?) {
+                // Delay slightly so clicks on internal components don't misfire
+                Timer(150) {
+                    ApplicationManager.getApplication().invokeLater {
+                        val focused = KeyboardFocusManager.getCurrentKeyboardFocusManager().focusedWindow
+                        if (focused != peersDialog) dismissPeersDialog()
+                    }
+                }.apply { isRepeats = false; start() }
+            }
         })
+
+        // Live refresh — tick the room timer every second, refresh peers every 3s
+        var refreshTick = 0
+        val wasInRoom = room != null
+        var peerSnapshot = peers.map { "${it.username}|${it.track}" }.joinToString()
+        var memberSnapshot = FocusRoomService.currentRoom?.members?.keys?.sorted()?.joinToString() ?: ""
+        var nearbySnapshot = FocusRoomService.getNearbyRooms()
+            .joinToString(";") { "${it.roomId}:${it.seenMembers.size}" }
+        popupRefreshTimer?.stop()
+        popupRefreshTimer = Timer(1000) {
+            ApplicationManager.getApplication().invokeLater {
+                // If room state changed since popup opened, rebuild
+                val nowInRoom = FocusRoomService.isInRoom
+                if (wasInRoom != nowInRoom) {
+                    refreshPeersDialog()
+                    return@invokeLater
+                }
+                // Always tick the active room countdown
+                FocusRoomService.currentRoom?.let { timerLbl.text = it.formattedTime() }
+                // Tick nearby room countdowns every second
+                nearbyTimerLabels.forEach { (nRoom, lbl) -> lbl.text = nRoom.formattedTime() }
+                // Every 3 ticks refresh peer/member/nearby state
+                if (++refreshTick % 3 == 0) {
+                    val current = NetworkDiscoveryService.getActivePeers()
+                    countLbl.text = if (current.isEmpty()) "0" else "${current.size}"
+                    countLbl.foreground = if (current.isNotEmpty()) green else fgMuted
+
+                    // Rebuild if any peer changed track
+                    val currentPeerSnapshot = current.map { "${it.username}|${it.track}" }.joinToString()
+                    if (currentPeerSnapshot != peerSnapshot) {
+                        peerSnapshot = currentPeerSnapshot
+                        refreshPeersDialog()
+                        return@invokeLater
+                    }
+
+                    // Rebuild if room membership changed
+                    val currentMemberSnapshot = FocusRoomService.currentRoom?.members?.keys?.sorted()?.joinToString() ?: ""
+                    if (currentMemberSnapshot != memberSnapshot) {
+                        memberSnapshot = currentMemberSnapshot
+                        refreshPeersDialog()
+                        return@invokeLater
+                    }
+
+                    // Rebuild if nearby rooms appeared, expired, or changed member count
+                    val currentNearbySnapshot = FocusRoomService.getNearbyRooms()
+                        .joinToString(";") { "${it.roomId}:${it.seenMembers.size}" }
+                    if (currentNearbySnapshot != nearbySnapshot) {
+                        nearbySnapshot = currentNearbySnapshot
+                        refreshPeersDialog()
+                    }
+                }
+            }
+        }.apply { start() }
     }
 
     private fun dismissPeersDialog() {
+        popupRefreshTimer?.stop()
+        popupRefreshTimer = null
         peersDialog?.dispose()
         peersDialog = null
+    }
+
+    /** Rebuild the popup after a state change, re-anchored to the status bar button. */
+    private fun refreshPeersDialog() {
+        if (peersDialog == null) return
+        dismissPeersDialog()
+        showPeersDialog(peersButton)
     }
 
     override fun install(statusBar: StatusBar) {
@@ -1052,6 +1513,26 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         volumePopupTimer?.stop()
         volumeDialog?.dispose()
         volumeDialog = null
+    }
+
+    /** Rounded-rect hover for text-based buttons (peers / room timer). */
+    private class PillButtonUI : BasicButtonUI() {
+        init {
+            UIManager.put("Button.paintShadow", false)
+            UIManager.put("Button.rollover", true)
+        }
+
+        override fun paint(g: Graphics, c: JComponent) {
+            if ((c as JButton).model.isRollover) {
+                val g2 = g.create() as Graphics2D
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                g2.color = Color(128, 128, 128, 45)
+                val arc = c.height - 4
+                g2.fillRoundRect(2, 2, c.width - 4, c.height - 4, arc, arc)
+                g2.dispose()
+            }
+            super.paint(g, c)
+        }
     }
 
     private class CircularButtonUI(private val alwaysShowBackground: Boolean = false) : BasicButtonUI() {
