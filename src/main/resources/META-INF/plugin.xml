@@ -1,14 +1,14 @@
-<idea-plugin>
+<idea-plugin require-restart="true">
     <id>com.github.magneto3572.spotyy</id>
     <name>Spotyy</name>
     <vendor email="magneto3572@github.com" url="https://github.com/magneto3572/Spotyy">magneto3572</vendor>
 
     <description><![CDATA[
-      <h2>Spotyy — Spotify Controls in Your IDE Status Bar</h2>
+      <h2>Spotyy — Spotify Controls + Team Music in Your IDE</h2>
 
       <p>
         Stay in the zone. <b>Spotyy</b> embeds Spotify playback controls directly into the JetBrains
-        status bar so you can manage music without ever leaving your editor.
+        status bar and lets you see what your teammates are listening to — all without leaving your editor.
       </p>
 
       <p>
@@ -18,14 +18,25 @@
 
       <hr/>
 
-      <h3>Features</h3>
+      <h3>Playback Controls</h3>
       <ul>
         <li><b>Play / Pause</b> — toggle playback instantly from the status bar</li>
         <li><b>Previous &amp; Next track</b> — skip or rewind without leaving your IDE</li>
-        <li><b>Volume slider</b> — click the volume icon to open an inline popup slider; auto-dismisses after 5 seconds</li>
-        <li><b>Now Playing</b> — live artist and track name displayed right in the status bar, refreshed every 3 seconds</li>
+        <li><b>Volume slider</b> — click the volume icon for an inline popup slider; auto-dismisses after 5 seconds</li>
+        <li><b>Now Playing</b> — live artist and track name in the status bar, refreshed every 3 seconds</li>
         <li><b>Adaptive theming</b> — icons and colours automatically match your IDE's light or dark theme</li>
-        <li><b>Zero performance impact</b> — all Spotify communication runs on background threads; the UI thread is never blocked</li>
+        <li><b>Zero performance impact</b> — all Spotify communication runs on background threads</li>
+      </ul>
+
+      <hr/>
+
+      <h3>Team Music (Local Network)</h3>
+      <ul>
+        <li><b>Listening nearby</b> — see who on your network is currently playing music and what track</li>
+        <li><b>Vibe match</b> — get notified when you and a teammate are listening to the same song or artist</li>
+        <li><b>Focus Room</b> — start a shared countdown timer (25 / 45 / 60 min) and invite teammates to focus together; the host can remove members at any time</li>
+        <li><b>Nearby room visibility</b> — even if you haven't been invited, you can see that a Focus Room is running on your network, who's hosting it, how many members are in it, and how much time is left</li>
+        <li><b>Ghost mode</b> — hide yourself from the network so no one can see what you're listening to; automatically locked while you're in a Focus Room</li>
       </ul>
 
       <hr/>
@@ -35,6 +46,7 @@
         <li>Install <b>Spotyy</b> and restart your IDE.</li>
         <li>Open the <b>Spotify desktop app</b> on your Mac and start playing a track.</li>
         <li>Open any project — the Spotyy widget appears automatically in the <b>bottom status bar</b>.</li>
+        <li>Click the <b>👥</b> or <b>✦</b> button in the status bar to open the team panel.</li>
         <li>Use the playback buttons to control music and the volume icon to adjust level.</li>
       </ol>
 
@@ -45,6 +57,7 @@
         <li>macOS 10.15 Catalina or later</li>
         <li>Spotify desktop application (installed and running)</li>
         <li>Any JetBrains IDE: IntelliJ IDEA, Android Studio, PyCharm, WebStorm, CLion, GoLand, Rider, and more</li>
+        <li>All users on the <b>same local network</b> (office Wi-Fi, shared LAN) to see each other</li>
       </ul>
 
       <h3>Permissions</h3>
@@ -64,10 +77,15 @@
     ]]></description>
 
     <change-notes><![CDATA[
-      <h2>0.0.5</h2>
+      <h2>0.0.4</h2>
       <ul>
-        <li><b>Broader IDE compatibility</b> — plugin now supports IntelliJ 2022.3+ and Android Studio Giraffe and later; no longer restricted to recent builds</li>
-        <li><b>Review nudge</b> — after 3 days of use, a one-time notification gently asks for a Marketplace review</li>
+        <li><b>Nearby room visibility</b> — non-members on the same network can now see active Focus Rooms: who's hosting, how many members are inside, and time remaining</li>
+        <li><b>Focus Room</b> — shared countdown timer (25 / 45 / 60 min); host can invite peers and remove members at any time</li>
+        <li><b>Listening nearby</b> — see teammates on the same network and what they're playing</li>
+        <li><b>Vibe match</b> — highlights when you're listening to the same song or artist as a teammate</li>
+        <li><b>Ghost mode</b> — hide yourself from the network; automatically locked while in a Focus Room</li>
+        <li><b>Broader IDE compatibility</b> — supports IntelliJ 2022.3+ and Android Studio Giraffe and later</li>
+        <li><b>Popup layout fix</b> — peer panel now renders at a consistent fixed width on all machines</li>
       </ul>
     ]]></change-notes>
 
