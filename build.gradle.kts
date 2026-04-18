@@ -37,9 +37,6 @@ dependencies {
         plugins(providers.gradleProperty("platformPlugins").map { it.split(',') })
     }
 
-    // Add dependency for changelog functionality
-    implementation("org.jetbrains:markdown:0.4.1")
-
     testImplementation(libs.junit)
 }
 
