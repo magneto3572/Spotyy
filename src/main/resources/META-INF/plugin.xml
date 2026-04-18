@@ -85,6 +85,17 @@
     ]]></description>
 
     <change-notes><![CDATA[
+      <h2>0.0.5</h2>
+      <ul>
+        <li><b>Linux support</b> — Spotify playback controls now work on Linux via D-Bus / MPRIS2; Spotify is auto-launched if not already running</li>
+        <li><b>First-run onboarding</b> — OS-aware setup walkthrough shown on first launch; guides you through installing Spotify, playerctl (Linux), and granting Automation permission (macOS), with one-click copy commands</li>
+        <li><b>Light mode UI fixes</b> — button hover color and separator are now theme-aware; no more black hover flash in light mode</li>
+        <li><b>Progress bar on theme switch</b> — progress bar no longer disappears when switching between dark and light themes</li>
+        <li><b>Vibe match midnight reset</b> — vibe match counter now resets at local midnight based on system clock</li>
+        <li><b>macOS: ~/Applications detection</b> — Spotify installed in the user Applications folder is now correctly detected</li>
+        <li><b>macOS: Automation permission alert</b> — shows a notification if the IDE is blocked from controlling Spotify, with instructions to fix it in System Settings</li>
+      </ul>
+
       <h2>0.0.4</h2>
       <ul>
         <li><b>Nearby room visibility</b> — non-members on the same network can now see active Focus Rooms: who's hosting, how many members are inside, and time remaining</li>
