@@ -8,10 +8,14 @@ import java.util.concurrent.TimeUnit
 // Data class to hold track details
 data class TrackInfo(val name: String, val artist: String)
 
-class SpotifyMacService {
+class SpotifyMacService : SpotifyService {
     private val logger = Logger.getInstance(SpotifyMacService::class.java)
 
-    fun getCurrentTrack(): SpotifyState {
+    /** True if macOS Automation permission is denied for this IDE process. */
+    @Volatile var automationPermissionBlocked = false
+        private set
+
+    override fun getCurrentTrack(): SpotifyState {
         val result = runAppleScript(
             """
             set spotifyRunning to false
@@ -23,32 +27,37 @@ class SpotifyMacService {
                     try
                         set ps to player state as string
                         set vol to sound volume as integer
+                        set pos to player position as real
                         try
                             set trackArtist to artist of current track
                             set trackName to name of current track
-                            return "1|" & ps & "|" & vol & "|" & trackArtist & " - " & trackName
+                            set dur to duration of current track as integer
+                            return "1|" & ps & "|" & vol & "|" & trackArtist & " - " & trackName & "|" & pos & "|" & dur
                         on error
-                            return "1|" & ps & "|" & vol & "|"
+                            return "1|" & ps & "|" & vol & "||" & pos & "|0"
                         end try
                     on error
-                        return "1|stopped|50|"
+                        return "1|stopped|50||0|0"
                     end try
                 end tell
             else
-                return "0|stopped|50|"
+                return "0|stopped|50||0|0"
             end if
             """.trimIndent()
         ) ?: return SpotifyState(false, false, null, 50)
 
-        val parts = result.split("|", limit = 4)
+        val parts = result.split("|", limit = 6)
         if (parts.size < 4) return SpotifyState(false, false, null, 50)
 
-        val isRunning = parts[0] == "1"
-        val isPlaying = parts[1] == "playing"
-        val volume = parts[2].toIntOrNull() ?: 50
-        val trackInfo = parts[3].trim().takeIf { it.isNotBlank() }
+        val isRunning  = parts[0] == "1"
+        val isPlaying  = parts[1] == "playing"
+        val volume     = parts[2].toIntOrNull() ?: 50
+        val trackInfo  = parts[3].trim().takeIf { it.isNotBlank() }
+        val positionMs = ((parts.getOrNull(4)?.toDoubleOrNull() ?: 0.0) * 1000).toLong()
+        // AppleScript duration is in milliseconds already
+        val durationMs = parts.getOrNull(5)?.toLongOrNull() ?: 0L
 
-        return SpotifyState(isRunning, isPlaying, trackInfo, volume)
+        return SpotifyState(isRunning, isPlaying, trackInfo, volume, positionMs, durationMs)
     }
 
     private fun isSpotifyRunning(): Boolean {
@@ -482,7 +491,7 @@ class SpotifyMacService {
         }
     }
 
-    fun playPause() {
+    override fun playPause() {
         runAppleScript(
             """
             tell application "Spotify"
@@ -492,7 +501,7 @@ class SpotifyMacService {
         )
     }
 
-    fun nextTrack() {
+    override fun nextTrack() {
         runAppleScript(
             """
             tell application "Spotify"
@@ -502,7 +511,7 @@ class SpotifyMacService {
         )
     }
 
-    fun previousTrack() {
+    override fun previousTrack() {
         runAppleScript(
             """
             tell application "Spotify"
@@ -512,7 +521,7 @@ class SpotifyMacService {
         )
     }
 
-    fun getVolume(): Int {
+    override fun getVolume(): Int {
         val result = runAppleScript(
             """
             tell application "Spotify"
@@ -524,7 +533,7 @@ class SpotifyMacService {
         return result?.toIntOrNull() ?: 50 // Default to 50% if we can't get the volume
     }
 
-    fun increaseVolume(amount: Int = 10) {
+    override fun increaseVolume(amount: Int) {
         val currentVolume = getVolume()
         val newVolume = minOf(100, currentVolume + amount)
 
@@ -537,7 +546,7 @@ class SpotifyMacService {
         )
     }
 
-    fun decreaseVolume(amount: Int = 10) {
+    override fun decreaseVolume(amount: Int) {
         val currentVolume = getVolume()
         val newVolume = maxOf(0, currentVolume - amount)
 
@@ -550,7 +559,7 @@ class SpotifyMacService {
         )
     }
 
-    fun setVolume(volume: Int) {
+    override fun setVolume(volume: Int) {
         val safeVolume = volume.coerceIn(0, 100)
 
         ApplicationManager.getApplication().executeOnPooledThread {
@@ -583,6 +592,10 @@ class SpotifyMacService {
 
                 if (error.isNotBlank()) {
                     logger.warn("AppleScript Error: $error")
+                    if (error.contains("-1743") || error.contains("not authorized", ignoreCase = true)
+                        || error.contains("automation", ignoreCase = true)) {
+                        automationPermissionBlocked = true
+                    }
                 }
                 if (output.startsWith("execution error") || (process.exitValue() != 0 && output.isBlank())) {
                     logger.warn("AppleScript Execution Error: $output")
@@ -614,5 +627,10 @@ data class SpotifyState(
     val isRunning: Boolean,
     val isPlaying: Boolean,
     val trackInfo: String?,
-    val volume: Int
-)
+    val volume: Int,
+    val positionMs: Long = 0L,
+    val durationMs: Long = 0L
+) {
+    /** 0.0–1.0, or 0 if duration unknown */
+    val progress: Float get() = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+}

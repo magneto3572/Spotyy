@@ -11,8 +11,11 @@
         status bar and lets you see what your teammates are listening to — all without leaving your editor.
       </p>
 
+      <p><img src="https://raw.githubusercontent.com/magneto3572/Spotyy/main/src/main/resources/screenshot/screenshot3.png" width="600" alt="Spotyy — Listening nearby, Focus Room, Ghost mode"/></p>
+
       <p>
-        <b>Note:</b> macOS only — uses AppleScript to communicate with the Spotify desktop app.
+        <b>Note:</b> Requires the Spotify desktop app to be installed and running.
+        Playback controls work on <b>macOS</b> (via AppleScript) and <b>Linux</b> (via D-Bus / MPRIS2).
         The Spotify web player is not supported.
       </p>
 
@@ -54,7 +57,7 @@
 
       <h3>Requirements</h3>
       <ul>
-        <li>macOS 10.15 Catalina or later</li>
+        <li><b>macOS</b> 10.15 Catalina or later — or — <b>Linux</b> with D-Bus (any modern distro)</li>
         <li>Spotify desktop application (installed and running)</li>
         <li>Any JetBrains IDE: IntelliJ IDEA, Android Studio, PyCharm, WebStorm, CLion, GoLand, Rider, and more</li>
         <li>All users on the <b>same local network</b> (office Wi-Fi, shared LAN) to see each other</li>
@@ -62,10 +65,15 @@
 
       <h3>Permissions</h3>
       <p>
-        On first launch, macOS may ask for <b>Automation permission</b> so the IDE can control Spotify.
+        <b>macOS:</b> On first launch, macOS may ask for <b>Automation permission</b> so the IDE can control Spotify.
         If the widget shows no track information, open
         <b>System Settings → Privacy &amp; Security → Automation</b>
         and enable Spotify access for your IDE.
+      </p>
+      <p>
+        <b>Linux:</b> Spotify is controlled via the standard D-Bus MPRIS2 interface — no extra permissions needed.
+        Optionally install <code>playerctl</code> for more reliable metadata parsing
+        (<code>sudo apt install playerctl</code> / <code>sudo dnf install playerctl</code>).
       </p>
 
       <hr/>

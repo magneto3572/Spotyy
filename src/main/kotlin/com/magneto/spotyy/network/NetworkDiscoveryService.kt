@@ -25,8 +25,9 @@ object NetworkDiscoveryService {
     @Volatile var localTrack: String = ""
         private set
 
-    private val peers        = ConcurrentHashMap<String, SpotyyPeer>()
-    private val recordedVibes = mutableSetOf<String>() // dedup: "peer|track"
+    private val peers         = ConcurrentHashMap<String, SpotyyPeer>()
+    private val recordedVibes = mutableSetOf<String>() // dedup: "peer|track", cleared at midnight
+    private var vibeDate      = LocalDate.now()        // date recordedVibes was last cleared
 
     @Volatile private var listenerSocket: DatagramSocket? = null
     @Volatile private var running = false
@@ -68,14 +69,18 @@ object NetworkDiscoveryService {
      * is only counted once even though it's detected every 3 seconds.
      */
     fun recordVibeMatch(peerName: String, track: String) {
+        val today = LocalDate.now()
+        if (today != vibeDate) {
+            recordedVibes.clear()
+            vibeDate = today
+        }
+
         val key = "$peerName|$track"
-        if (!recordedVibes.add(key)) return // already recorded this session
+        if (!recordedVibes.add(key)) return
 
         val props   = PropertiesComponent.getInstance()
-        val today   = LocalDate.now().toString()
-        val stored  = props.getValue(VIBE_DATE_KEY, "")
-        val current = if (stored == today) props.getValue(VIBE_COUNT_KEY, "0").toIntOrNull() ?: 0 else 0
-        props.setValue(VIBE_DATE_KEY, today)
+        val current = props.getValue(VIBE_COUNT_KEY, "0").toIntOrNull() ?: 0
+        props.setValue(VIBE_DATE_KEY, today.toString())
         props.setValue(VIBE_COUNT_KEY, (current + 1).toString())
     }
 
@@ -161,6 +166,15 @@ object NetworkDiscoveryService {
 
     // ── Listener ──────────────────────────────────────────────────────────────
 
+    /** Returns true if [addr] belongs to one of this machine's network interfaces. */
+    private fun isLocalAddress(addr: InetAddress): Boolean {
+        return try {
+            NetworkInterface.getNetworkInterfaces()?.toList()?.any { ni ->
+                ni.inetAddresses.toList().any { it == addr }
+            } ?: false
+        } catch (_: Exception) { false }
+    }
+
     private fun startListenerThread() {
         Thread {
             while (running) {
@@ -177,6 +191,9 @@ object NetworkDiscoveryService {
                         val packet = DatagramPacket(buf, buf.size)
                         try {
                             socket.receive(packet)
+                            // Skip packets sent by this machine (compare by IP, not username,
+                            // so two machines with the same username are treated as different peers)
+                            if (isLocalAddress(packet.address)) continue
                             parseAndStore(String(packet.data, 0, packet.length, Charsets.UTF_8))
                         } catch (_: SocketTimeoutException) {}
                           catch (_: SocketException)      { break }
@@ -205,7 +222,6 @@ object NetworkDiscoveryService {
         val name      = parts[1].trim()
         val track     = parts[2].trim()
         val isPlaying = parts[3].trim() == "true"
-        if (name == localUsername) return
         if (isPlaying && track.isNotBlank()) {
             peers[name] = SpotyyPeer(name, track, System.currentTimeMillis())
         } else {

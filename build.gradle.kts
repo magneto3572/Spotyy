@@ -39,6 +39,8 @@ dependencies {
 
     // Add dependency for changelog functionality
     implementation("org.jetbrains:markdown:0.4.1")
+
+    testImplementation(libs.junit)
 }
 
 // Configure IntelliJ Platform Gradle Plugin - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-extension.html
@@ -77,4 +79,10 @@ tasks {
     //         enabled = false
     //     }
     // }
+}
+
+intellijPlatform {
+    publishing {
+        token = providers.environmentVariable("PUBLISH_TOKEN")
+    }
 }

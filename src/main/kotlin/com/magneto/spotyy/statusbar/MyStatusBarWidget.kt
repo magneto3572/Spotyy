@@ -1,7 +1,7 @@
 package com.magneto.spotyy.statusbar
 
 import com.intellij.ide.ui.LafManagerListener
-import com.magneto.spotyy.spotify.SpotifyMacService
+import com.magneto.spotyy.spotify.SpotifyServiceFactory
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.util.IconLoader
 import com.intellij.openapi.wm.CustomStatusBarWidget
@@ -10,11 +10,14 @@ import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.ui.JBColor
 import com.intellij.util.IconUtil
 import com.magneto.spotyy.focus.FocusRoomService
+import com.magneto.spotyy.onboarding.OnboardingService
 import com.magneto.spotyy.focus.RoomMember
 import com.magneto.spotyy.network.NetworkDiscoveryService
 import com.magneto.spotyy.network.VibeMatch
 import com.magneto.spotyy.spotify.SpotifyState
 import java.awt.*
+import java.awt.geom.Arc2D
+import java.awt.geom.Ellipse2D
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.event.WindowAdapter
@@ -28,7 +31,7 @@ import javax.swing.plaf.basic.BasicSliderUI
 
 class MyStatusBarWidget : CustomStatusBarWidget {
 
-    private val spotifyService = SpotifyMacService()
+    private val spotifyService = SpotifyServiceFactory.instance
     private val updateTimer: Timer
     private var statusBar: StatusBar? = null
 
@@ -69,6 +72,8 @@ class MyStatusBarWidget : CustomStatusBarWidget {
 
     // Track the volume dialog to allow dismissal on second click
     private var volumeDialog: JDialog? = null
+    @Volatile private var lastVolume = 50         // updated every 3s by the polling timer
+    @Volatile private var volumeDismissedAt = 0L  // timestamp of last focus-loss dismissal
 
     // Timer for auto-dismissal of volume popup
     private var volumePopupTimer: Timer? = null
@@ -77,6 +82,11 @@ class MyStatusBarWidget : CustomStatusBarWidget {
     private val peersButton = JButton()
     private var peersDialog: JDialog? = null
     private var popupRefreshTimer: Timer? = null
+    private var lastPeersButtonRightX = 0
+    private var lastPeersButtonScreenY = 0
+
+    private val pillUI = PillButtonUI()
+    private val playPauseUI = CircularButtonUI(alwaysShowBackground = true)
 
     // Icons for controls - load from resources and ensure consistent sizing
     private val iconSize = 16  // Define standard icon size
@@ -224,6 +234,13 @@ class MyStatusBarWidget : CustomStatusBarWidget {
                 val textColor = if (isDarkTheme) Color.WHITE else Color.BLACK
                 trackInfoLabel.foreground = textColor
 
+                // Re-apply custom UIs — L&F change resets button UI to the default, wiping our custom painters
+                prevButton.ui = CircularButtonUI(false)
+                nextButton.ui = CircularButtonUI(false)
+                volumeButton.ui = CircularButtonUI(false)
+                playPauseButton.ui = playPauseUI
+                peersButton.ui = pillUI
+
                 panel.revalidate()
                 panel.repaint()
             } catch (e: Exception) {
@@ -279,23 +296,34 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         configureControlButton(playPauseButton, playIcon, PLAY_TEXT, true) {
             spotifyService.playPause()
         }
+        playPauseButton.ui = playPauseUI  // use shared instance so progress can be updated
 
         configureControlButton(nextButton, nextIcon, NEXT_TEXT) {
             spotifyService.nextTrack()
         }
 
-        configureControlButton(volumeButton, volumeIcon, VOLUME_TEXT) {
-            // If dialog is already visible, dismiss it
-            if (volumeDialog != null && volumeDialog!!.isVisible) {
-                volumeDialog!!.dispose()
-                volumeDialog = null
-                return@configureControlButton
-            }
-
-            // Get position relative to the button
-            val bounds = volumeButton.bounds
-            showVolumeSliderDialog(volumeButton, bounds.x + bounds.width / 2, bounds.y)
+        // Volume button: appearance via configureControlButton, positioning via MouseListener.
+        // MouseEvent.xOnScreen / yOnScreen come directly from the OS native event — guaranteed
+        // correct on all platforms, bypassing Swing component-hierarchy coordinate issues on Linux.
+        configureControlButton(volumeButton, volumeIcon, VOLUME_TEXT) {}
+        for (listener in volumeButton.actionListeners.toList()) {
+            volumeButton.removeActionListener(listener)
         }
+        volumeButton.addMouseListener(object : MouseAdapter() {
+            override fun mousePressed(e: MouseEvent) {
+                if (!SwingUtilities.isLeftMouseButton(e)) return
+                if (volumeDialog?.isVisible == true) {
+                    dismissVolumePopup()
+                } else {
+                    // If the popup was just dismissed by focus loss (because this click stole focus),
+                    // don't reopen — the click's intent was to close it.
+                    if (System.currentTimeMillis() - volumeDismissedAt < 250) return
+                    val rightEdgeX = e.xOnScreen - e.x + volumeButton.width
+                    val buttonTopY = e.yOnScreen - e.y
+                    showVolumeSliderDialog(rightEdgeX, buttonTopY)
+                }
+            }
+        })
 
         // Peers button — shows who else on the network is listening
         peersButton.apply {
@@ -309,25 +337,31 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             // No fixed preferredSize — let the button grow to fit its text (timer can be wide)
             border = BorderFactory.createEmptyBorder(3, 8, 3, 8)
             isVisible = false
-            ui = PillButtonUI()
+            ui = pillUI
             putClientProperty("JComponent.NO_HOVER", false)
             putClientProperty("JButton.arc", 999)
-            addActionListener {
-                ApplicationManager.getApplication().invokeLater {
-                    if (peersDialog?.isVisible == true) {
-                        dismissPeersDialog()
-                    } else {
-                        showPeersDialog(peersButton)
+            addMouseListener(object : MouseAdapter() {
+                override fun mousePressed(e: MouseEvent) {
+                    if (!SwingUtilities.isLeftMouseButton(e)) return
+                    ApplicationManager.getApplication().invokeLater {
+                        if (peersDialog?.isVisible == true) {
+                            dismissPeersDialog()
+                        } else {
+                            lastPeersButtonRightX = e.xOnScreen - e.x + peersButton.width
+                            lastPeersButtonScreenY = e.yOnScreen - e.y
+                            showPeersDialog(lastPeersButtonRightX, lastPeersButtonScreenY)
+                        }
                     }
                 }
-            }
+            })
         }
 
         // Create a separator before controls
         val separator = JSeparator(SwingConstants.VERTICAL)
         separator.preferredSize = Dimension(1, 16)
-        separator.background = Color(80, 80, 80)
-        separator.foreground = Color(80, 80, 80)
+        val separatorColor = if (isDarkTheme) Color(80, 80, 80) else Color(190, 190, 200)
+        separator.background = separatorColor
+        separator.foreground = separatorColor
 
         // Add components in the right order with proper spacing
         controlsPanel.add(Box.createHorizontalStrut(8)) // Start padding
@@ -356,225 +390,163 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         }
     }
 
-    private fun showVolumeSliderDialog(component: Component, x: Int, y: Int) {
+    // buttonRightX = screen X of the button's right edge.
+    // buttonTopY   = screen Y of the button's top edge (e.yOnScreen - e.y) — constant regardless of click position.
+    private fun showVolumeSliderDialog(buttonRightX: Int, buttonTopY: Int) {
         try {
-            // Dismiss existing dialog if any
             dismissVolumePopup()
 
-            // Get volume in background thread and then show UI
-            ApplicationManager.getApplication().executeOnPooledThread {
-                val currentVolume = spotifyService.getVolume()
-                // Create and show UI on EDT
-                ApplicationManager.getApplication().invokeLater {
-                    volumeDialog = JDialog()
-                    volumeDialog?.isUndecorated = true
-                    volumeDialog?.modalityType = Dialog.ModalityType.MODELESS
-                    volumeDialog?.background = Color(43, 43, 43)
+            val currentVolume = lastVolume
 
-                    // Create rounded panel for the content
-                    class RoundedPanel(layout: LayoutManager) : JPanel(layout) {
-                        override fun paintComponent(g: Graphics) {
-                            val g2 = g.create() as Graphics2D
-                            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-                            g2.color = Color(43, 43, 43)
-                            g2.fillRoundRect(0, 0, width, height, 15, 15)
-                            g2.dispose()
-                        }
+            // Theme colours
+            val dark       = isDarkTheme
+            val popupBg    = if (dark) Color(30, 30, 32)      else Color(248, 248, 250)
+            val labelFg    = if (dark) Color(255, 255, 255)   else Color(20, 20, 20)
+            val trackBg    = if (dark) Color(60, 60, 65)      else Color(205, 205, 212)
+            val fillGreen  = if (dark) Color(30, 215, 96)     else Color(18, 168, 74)
+            val thumbCol   = if (dark) Color(255, 255, 255)   else Color(255, 255, 255)
+            val borderCol  = if (dark) Color(55, 55, 58)      else Color(220, 220, 226)
 
-                        override fun paintBorder(g: Graphics) {
-                            // No border
-                        }
+            volumeDialog = JDialog()
+            volumeDialog?.isUndecorated = true
+            volumeDialog?.modalityType = Dialog.ModalityType.MODELESS
+            volumeDialog?.background = Color(0, 0, 0, 0)
 
-                        override fun isOpaque(): Boolean {
-                            return false
-                        }
+            val pctLabel = JLabel("$currentVolume%")
+
+            // Outer card — rounded rect with subtle border
+            val card = object : JPanel(BorderLayout(0, 0)) {
+                override fun paintComponent(g: Graphics) {
+                    val g2 = g.create() as Graphics2D
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                    g2.color = popupBg
+                    g2.fillRoundRect(0, 0, width, height, 14, 14)
+                    g2.color = borderCol
+                    g2.drawRoundRect(0, 0, width - 1, height - 1, 14, 14)
+                    g2.dispose()
+                }
+                override fun isOpaque() = false
+            }
+            card.border = BorderFactory.createEmptyBorder(12, 14, 12, 14)
+
+            // Header row: "Volume" label left, percentage right
+            val header = JPanel(BorderLayout())
+            header.isOpaque = false
+            header.border = BorderFactory.createEmptyBorder(0, 0, 10, 0)
+            val titleLbl = JLabel("Volume")
+            titleLbl.foreground = labelFg
+            titleLbl.font = titleLbl.font.deriveFont(Font.BOLD, 12f)
+            pctLabel.foreground = if (dark) Color(160, 160, 168) else Color(120, 120, 130)
+            pctLabel.font = pctLabel.font.deriveFont(Font.PLAIN, 11f)
+            header.add(titleLbl, BorderLayout.WEST)
+            header.add(pctLabel, BorderLayout.EAST)
+            card.add(header, BorderLayout.NORTH)
+
+            // Slider
+            val volumeSlider = JSlider(JSlider.HORIZONTAL, 0, 100, currentVolume)
+            volumeSlider.paintTicks  = false
+            volumeSlider.paintLabels = false
+            volumeSlider.isOpaque    = false
+            volumeSlider.isFocusable = false
+            volumeSlider.border      = BorderFactory.createEmptyBorder()
+            volumeSlider.putClientProperty("JComponent.outline", null)
+
+            volumeSlider.ui = object : BasicSliderUI(volumeSlider) {
+                private val TRACK_H  = 3
+                private val THUMB_D  = 13
+
+                override fun getThumbSize() = Dimension(THUMB_D, THUMB_D)
+
+                override fun paintTrack(g: Graphics) {
+                    val g2 = g.create() as Graphics2D
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                    val ty = trackRect.y + (trackRect.height - TRACK_H) / 2
+                    // Background track
+                    g2.color = trackBg
+                    g2.fillRoundRect(trackRect.x, ty, trackRect.width, TRACK_H, TRACK_H, TRACK_H)
+                    // Filled portion
+                    val fillW = thumbRect.x + thumbRect.width / 2 - trackRect.x
+                    if (fillW > 0) {
+                        g2.color = fillGreen
+                        g2.fillRoundRect(trackRect.x, ty, fillW, TRACK_H, TRACK_H, TRACK_H)
                     }
+                    g2.dispose()
+                }
 
-                    // Create the rounded content panel
-                    val contentPanel = RoundedPanel(BorderLayout())
-                    contentPanel.border = BorderFactory.createEmptyBorder(10, 15, 10, 15)
-                    contentPanel.putClientProperty("JComponent.outline", null)
+                override fun paintThumb(g: Graphics) {
+                    val g2 = g.create() as Graphics2D
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                    val mid = trackRect.y + trackRect.height / 2
+                    val tx  = thumbRect.x
+                    val ty  = mid - THUMB_D / 2
+                    // Shadow ring
+                    g2.color = Color(0, 0, 0, 40)
+                    g2.fillOval(tx, ty + 1, THUMB_D, THUMB_D)
+                    // Thumb
+                    g2.color = thumbCol
+                    g2.fillOval(tx, ty, THUMB_D, THUMB_D)
+                    g2.dispose()
+                }
 
-                    // Add volume control heading
-                    val titleLabel = JLabel("Volume Control", SwingConstants.CENTER)
-                    titleLabel.foreground = Color.WHITE
-                    titleLabel.font = titleLabel.font.deriveFont(Font.BOLD, 14f)
-                    contentPanel.add(titleLabel, BorderLayout.NORTH)
+                override fun paintFocus(g: Graphics) {}
+            }
 
-                    // Create the slider with custom white circle thumb
-                    val volumeSlider = JSlider(JSlider.HORIZONTAL, 0, 100, currentVolume)
-                    volumeSlider.paintTicks = false  // Don't show tick marks
-                    volumeSlider.paintLabels = false  // Don't paint number labels
-                    volumeSlider.background = Color(43, 43, 43)
-                    volumeSlider.foreground = Color.WHITE
-                    volumeSlider.isOpaque = false // Make transparent to show rounded background
-
-                    // Make slider more responsive by setting faster update interval
-                    volumeSlider.setMinorTickSpacing(1)
-                    volumeSlider.putClientProperty("JSlider.isFilled", true)
-                    volumeSlider.putClientProperty("Slider.paintThumbArrowShape", false)
-
-                    // Explicitly remove any borders from the slider
-                    volumeSlider.border = BorderFactory.createEmptyBorder()
-                    volumeSlider.putClientProperty("JComponent.outline", null)
-                    volumeSlider.isFocusable = false
-
-                    // Custom UI for white circle thumb
-                    volumeSlider.ui = object : BasicSliderUI(volumeSlider) {
-                        private val THUMB_SIZE = 12
-
-                        override fun paintThumb(g: Graphics) {
-                            val g2 = g.create() as Graphics2D
-                            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-
-                            val knobBounds = thumbRect
-                            g2.color = Color.WHITE
-
-                            // Center the circle vertically on the track
-                            val trackMidpoint = trackRect.y + (trackRect.height / 2)
-                            val thumbY = trackMidpoint - (THUMB_SIZE / 2)
-
-                            g2.fillOval(knobBounds.x, thumbY, THUMB_SIZE, THUMB_SIZE)
-                            g2.dispose()
-                        }
-
-                        override fun paintTrack(g: Graphics) {
-                            val g2 = g.create() as Graphics2D
-                            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-                            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_SPEED)
-
-                            // Draw track background - simplified for performance
-                            val trackBounds = trackRect
-                            val height = 4
-                            val y = trackBounds.y + (trackBounds.height - height) / 2
-
-                            // Background track (darker gray)
-                            g2.color = Color(90, 90, 90)
-                            g2.fillRoundRect(trackBounds.x, y, trackBounds.width, height, height, height)
-
-                            // Filled part of track (white) - only draw if needed
-                            val thumbPos = thumbRect.x + thumbRect.width / 2
-                            if (thumbPos > trackBounds.x) {
-                                g2.color = Color.WHITE
-                                g2.fillRoundRect(trackBounds.x, y, thumbPos - trackBounds.x, height, height, height)
-                            }
-
-                            g2.dispose()
-                        }
-
-                        override fun getThumbSize(): Dimension {
-                            return Dimension(THUMB_SIZE, THUMB_SIZE)
-                        }
+            volumeSlider.addChangeListener {
+                val v = volumeSlider.value
+                pctLabel.text = "$v%"
+                volumeButton.toolTipText = "Volume: $v%"
+                if (!volumeSlider.valueIsAdjusting) {
+                    ApplicationManager.getApplication().executeOnPooledThread {
+                        spotifyService.setVolume(v)
+                        ApplicationManager.getApplication().invokeLater { updateVolumeIcon(v) }
                     }
-
-                    // Add change listener to slider
-                    volumeSlider.addChangeListener {
-                        val newVolume = volumeSlider.value
-
-                        // Update UI immediately but only send to Spotify when sliding stops
-                        // Update volume button tooltip immediately for visual feedback
-                        volumeButton.toolTipText = "Volume: $newVolume%"
-
-                        // Only update Spotify when sliding stops to avoid lag
-                        if (!volumeSlider.valueIsAdjusting) {
-                            // Use background thread for Spotify communication to avoid UI lag
-                            ApplicationManager.getApplication().executeOnPooledThread {
-                                spotifyService.setVolume(newVolume)
-
-                                // Update UI on EDT after setting volume
-                                ApplicationManager.getApplication().invokeLater {
-                                    updateVolumeIcon(newVolume)
-                                }
-                            }
-                        } else {
-                            // During sliding, just update the UI for smoother experience 
-                            updateVolumeIcon(newVolume)
-                        }
-                    }
-
-                    // Add some padding above the slider
-                    val sliderPanel = JPanel(BorderLayout())
-                    sliderPanel.background = Color(43, 43, 43)
-                    sliderPanel.isOpaque = false
-                    sliderPanel.border = BorderFactory.createEmptyBorder(10, 0, 0, 0)
-                    sliderPanel.putClientProperty("JComponent.outline", null)
-                    sliderPanel.add(volumeSlider, BorderLayout.CENTER)
-
-                    // Add to the content panel (after the title)
-                    contentPanel.add(sliderPanel, BorderLayout.CENTER)
-
-                    // Add to dialog and show
-                    volumeDialog?.contentPane = contentPanel
-                    volumeDialog?.rootPane?.putClientProperty("JRootPane.isDialogRootPane", true)
-                    volumeDialog?.rootPane?.putClientProperty("JComponent.outline", null)
-                    volumeDialog?.rootPane?.border = BorderFactory.createEmptyBorder()
-                    volumeDialog?.pack()
-
-                    // Position the dialog properly relative to the volume button
-                    val dialogSize = volumeDialog?.size ?: Dimension(300, 80)
-                    val screenSize = Toolkit.getDefaultToolkit().screenSize
-                    val componentLocation = component.locationOnScreen
-
-                    // Calculate ideal position above the status bar
-                    var xPos = componentLocation.x - (dialogSize.width / 2) + (component.width / 2)
-                    var yPos = componentLocation.y - dialogSize.height - 15  //
-
-                    // Keep dialog within screen bounds
-                    xPos = xPos.coerceIn(50, screenSize.width - dialogSize.width - 50)
-                    yPos = yPos.coerceAtLeast(30)
-
-                    volumeDialog?.setLocation(xPos, yPos)
-                    volumeDialog?.isVisible = true
-
-                    // Start a simple timer that will close the popup after exactly 5 seconds
-                    startPopupDismissTimer()
-
-                    // Add window listener to cancel timer if popup is closed by other means
-                    volumeDialog?.addWindowListener(object : WindowAdapter() {
-                        override fun windowClosed(e: WindowEvent?) {
-                            cancelPopupDismissTimer()
-                        }
-                    })
-
-                    // Simple listeners to detect any activity
-                    volumeSlider.addMouseListener(object : MouseAdapter() {
-                        override fun mouseClicked(e: MouseEvent) {
-                            // Restart the timer on any activity
-                            startPopupDismissTimer()
-                        }
-
-                        override fun mousePressed(e: MouseEvent) {
-                            startPopupDismissTimer()
-                        }
-
-                        override fun mouseReleased(e: MouseEvent) {
-                            startPopupDismissTimer()
-                        }
-                    })
-
-                    volumeSlider.addMouseMotionListener(object : MouseAdapter() {
-                        override fun mouseDragged(e: MouseEvent) {
-                            startPopupDismissTimer()
-                        }
-
-                        override fun mouseMoved(e: MouseEvent) {
-                            startPopupDismissTimer()
-                        }
-                    })
-
-                    // Add window listener for when the dialog loses focus
-                    volumeDialog?.addWindowFocusListener(object : WindowFocusListener {
-                        override fun windowGainedFocus(e: WindowEvent?) {
-                            startPopupDismissTimer()
-                        }
-
-                        override fun windowLostFocus(e: WindowEvent?) {
-                            // When focus is lost, dismiss immediately
-                            dismissVolumePopup()
-                        }
-                    })
+                } else {
+                    updateVolumeIcon(v)
                 }
             }
+
+            card.add(volumeSlider, BorderLayout.CENTER)
+
+            volumeDialog?.contentPane = card
+            volumeDialog?.rootPane?.isOpaque = false
+            volumeDialog?.rootPane?.border   = BorderFactory.createEmptyBorder()
+            volumeDialog?.pack()
+
+            // Position: right-align to button, 12px gap above button top
+            val dialogSize = volumeDialog?.size ?: Dimension(220, 70)
+            val refPoint = Point(buttonRightX, buttonTopY)
+            val screenBounds = GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .screenDevices.map { it.defaultConfiguration.bounds }
+                .firstOrNull { it.contains(refPoint) }
+                ?: GraphicsEnvironment.getLocalGraphicsEnvironment()
+                    .defaultScreenDevice.defaultConfiguration.bounds
+            val xPos = (buttonRightX - dialogSize.width)
+                .coerceIn(screenBounds.x, screenBounds.x + screenBounds.width - dialogSize.width)
+            val yPos = (buttonTopY - dialogSize.height - 12).coerceAtLeast(screenBounds.y)
+
+            volumeDialog?.setLocation(xPos, yPos)
+            volumeDialog?.isVisible = true
+            startPopupDismissTimer()
+
+            volumeDialog?.addWindowListener(object : WindowAdapter() {
+                override fun windowClosed(e: WindowEvent?) { cancelPopupDismissTimer() }
+            })
+            volumeDialog?.addWindowFocusListener(object : WindowFocusListener {
+                override fun windowGainedFocus(e: WindowEvent?) { startPopupDismissTimer() }
+                override fun windowLostFocus(e: WindowEvent?) {
+                    volumeDismissedAt = System.currentTimeMillis()
+                    dismissVolumePopup()
+                }
+            })
+            volumeSlider.addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(e: MouseEvent)  { startPopupDismissTimer() }
+                override fun mousePressed(e: MouseEvent)  { startPopupDismissTimer() }
+                override fun mouseReleased(e: MouseEvent) { startPopupDismissTimer() }
+            })
+            volumeSlider.addMouseMotionListener(object : MouseAdapter() {
+                override fun mouseDragged(e: MouseEvent) { startPopupDismissTimer() }
+                override fun mouseMoved(e: MouseEvent)   { startPopupDismissTimer() }
+            })
         } catch (e: Exception) {
             e.printStackTrace()
             volumeDialog = null
@@ -582,6 +554,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
     }
 
     private fun updateVolumeIcon(volume: Int) {
+        lastVolume = volume
         if (volume == 0) {
             volumeButton.icon = volumeMuteIcon
             volumeButton.text = if (volumeMuteIcon == null) VOLUME_MUTE_TEXT else ""
@@ -608,6 +581,11 @@ class MyStatusBarWidget : CustomStatusBarWidget {
     }
 
     private fun updateUIWithState(state: SpotifyState) {
+        // Update song progress ring on play/pause button
+        playPauseUI.progress = state.progress
+        playPauseUI.isPlaying = state.isPlaying
+        playPauseButton.repaint()
+
         // Update track info
         val trackInfo = when {
             !state.isRunning -> "Spotyy"
@@ -690,7 +668,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         }
     }
 
-    private fun showPeersDialog(component: Component) {
+    private fun showPeersDialog(buttonRightX: Int, buttonTopY: Int) {
         dismissPeersDialog()
 
         val peers      = NetworkDiscoveryService.getActivePeers()
@@ -872,7 +850,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
 
                 when (match) {
                     VibeMatch.SAME_SONG -> {
-                        val badge = object : JLabel("  ✦ Vibing!") {
+                        val badge = object : JLabel("✦ Vibing!") {
                             override fun paintComponent(g: Graphics) {
                                 val g2 = g.create() as Graphics2D
                                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
@@ -884,15 +862,15 @@ class MyStatusBarWidget : CustomStatusBarWidget {
                         }
                         badge.foreground = green
                         badge.font = badge.font.deriveFont(Font.BOLD, 10f)
-                        badge.border = BorderFactory.createEmptyBorder(1, 6, 1, 6)
-                        trackRow.add(Box.createHorizontalStrut(6))
+                        badge.border = BorderFactory.createEmptyBorder(2, 8, 2, 8)
+                        trackRow.add(Box.createHorizontalStrut(8))
                         trackRow.add(badge)
                     }
                     VibeMatch.SAME_ARTIST -> {
-                        val badge = JLabel("  ∼ Same artist")
+                        val badge = JLabel("∼ Same artist")
                         badge.foreground = fgMuted
                         badge.font = badge.font.deriveFont(10f)
-                        trackRow.add(Box.createHorizontalStrut(4))
+                        trackRow.add(Box.createHorizontalStrut(6))
                         trackRow.add(badge)
                     }
                     VibeMatch.NONE -> {}
@@ -1370,11 +1348,18 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             minimumSize = Dimension(popupWidth, 1)
         }
 
-        val sz     = peersDialog!!.size
-        val screen = Toolkit.getDefaultToolkit().screenSize
-        val loc    = component.locationOnScreen
-        val xPos   = (loc.x - sz.width / 2 + component.width / 2).coerceIn(16, screen.width - sz.width - 16)
-        val yPos   = (loc.y - sz.height - 10).coerceAtLeast(16)
+        val sz = peersDialog!!.size
+        val refPoint = Point(buttonRightX, buttonTopY)
+        val screenBounds = GraphicsEnvironment.getLocalGraphicsEnvironment()
+            .screenDevices
+            .map { it.defaultConfiguration.bounds }
+            .firstOrNull { it.contains(refPoint) }
+            ?: GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .defaultScreenDevice.defaultConfiguration.bounds
+        // Right-align popup to button's right edge; 12px gap between popup bottom and button top
+        val xPos = (buttonRightX - sz.width)
+            .coerceIn(screenBounds.x, screenBounds.x + screenBounds.width - sz.width)
+        val yPos = (buttonTopY - sz.height - 12).coerceAtLeast(screenBounds.y)
         peersDialog!!.setLocation(xPos, yPos)
         peersDialog!!.isVisible = true
 
@@ -1457,7 +1442,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
     private fun refreshPeersDialog() {
         if (peersDialog == null) return
         dismissPeersDialog()
-        showPeersDialog(peersButton)
+        showPeersDialog(lastPeersButtonRightX, lastPeersButtonScreenY)
     }
 
     override fun install(statusBar: StatusBar) {
@@ -1516,7 +1501,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
     }
 
     /** Rounded-rect hover for text-based buttons (peers / room timer). */
-    private class PillButtonUI : BasicButtonUI() {
+    private inner class PillButtonUI : BasicButtonUI() {
         init {
             UIManager.put("Button.paintShadow", false)
             UIManager.put("Button.rollover", true)
@@ -1535,9 +1520,11 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         }
     }
 
-    private class CircularButtonUI(private val alwaysShowBackground: Boolean = false) : BasicButtonUI() {
+    private inner class CircularButtonUI(private val alwaysShowBackground: Boolean = false) : BasicButtonUI() {
+        var progress: Float = 0f
+        var isPlaying: Boolean = false
+
         init {
-            // Make sure hover only happens within button bounds
             UIManager.put("Button.paintShadow", false)
             UIManager.put("Button.rollover", true)
         }
@@ -1546,22 +1533,53 @@ class MyStatusBarWidget : CustomStatusBarWidget {
             val g2 = g.create() as Graphics2D
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
             g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+            g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE)
 
             val button = c as JButton
             val size = minOf(button.width, button.height) - 4
-            val x = (button.width - size) / 2
-            val y = (button.height - size) / 2
+            val cx = (button.width - size) / 2
+            val cy = (button.height - size) / 2
 
-            // For play/pause button, always show a circular background
             if (alwaysShowBackground) {
-                g2.color = Color(90, 90, 90)
-                g2.fillOval(x, y, size, size)
+                val strokeW = 2f
+                val inset = strokeW / 2f + 0.5f
+                val rx = cx + inset
+                val ry = cy + inset
+                val rw = size - inset * 2
+                val rh = size - inset * 2
+
+                // Theme-aware colors
+                val faceBg    = if (isDarkTheme) Color(58, 58, 58)   else Color(210, 210, 215)
+                val trackRing = if (isDarkTheme) Color(78, 78, 82)   else Color(185, 185, 192)
+                val green     = if (isDarkTheme) Color(30, 215, 96)  else Color(18, 168, 74)
+                val greenMuted= if (isDarkTheme) Color(30, 215, 96, 110) else Color(18, 168, 74, 130)
+
+                // Button face
+                g2.color = faceBg
+                g2.fill(Ellipse2D.Float(rx, ry, rw, rh))
+
+                // Full track ring
+                g2.stroke = BasicStroke(strokeW, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND)
+                g2.color = trackRing
+                g2.draw(Ellipse2D.Float(rx, ry, rw, rh))
+
+                // Progress arc
+                if (progress > 0f) {
+                    val arcAngle = -(progress * 360f)
+                    g2.stroke = BasicStroke(strokeW, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+                    g2.color = if (isPlaying) green else greenMuted
+                    g2.draw(Arc2D.Float(rx, ry, rw, rh, 90f, arcAngle, Arc2D.OPEN))
+                }
             }
 
-            // Show highlight on hover for all buttons
             if (button.model.isRollover) {
-                g2.color = if (alwaysShowBackground) Color(110, 110, 110) else Color(60, 60, 60)
-                g2.fillOval(x, y, size, size)
+                val hoverColor = if (isDarkTheme) Color(255, 255, 255, 20) else Color(0, 0, 0, 18)
+                val nonPrimaryHover = if (isDarkTheme) Color(255, 255, 255, 35) else Color(0, 0, 0, 20)
+                g2.color = if (alwaysShowBackground) hoverColor else nonPrimaryHover
+                g2.fill(Ellipse2D.Float(
+                    (cx + 1).toFloat(), (cy + 1).toFloat(),
+                    (size - 2).toFloat(), (size - 2).toFloat()
+                ))
             }
 
             g2.dispose()
@@ -1618,8 +1636,13 @@ class MyStatusBarWidget : CustomStatusBarWidget {
 
             addActionListener {
                 ApplicationManager.getApplication().executeOnPooledThread {
+                    if (!OnboardingService.isSpotifyReady()) {
+                        ApplicationManager.getApplication().invokeLater {
+                            OnboardingService.showNow()
+                        }
+                        return@executeOnPooledThread
+                    }
                     action()
-                    // Wait for Spotify to process the command before reading state back
                     Thread.sleep(300)
                     updateCurrentTrack()
                 }
