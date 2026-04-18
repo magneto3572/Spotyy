@@ -1,4 +1,6 @@
-# Spotyy — Claude Context Document
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -8,38 +10,38 @@
 - **Plugin ID:** `com.github.magneto3572.spotyy`
 - **Current version:** `0.0.4` (in `gradle.properties`)
 - **Supported IDEs:** IntelliJ 2022.3+ (`pluginSinceBuild = 231`), Android Studio Giraffe+, all JetBrains IDEs
-- **Build tool:** Gradle + IntelliJ Platform Gradle Plugin
+- **Build tool:** Gradle + IntelliJ Platform Gradle Plugin (JDK 17)
 
 ---
 
-## Repository Layout
+## Build & Development Commands
 
-```
-src/main/kotlin/com/magneto/spotyy/
-├── focus/
-│   └── FocusRoomService.kt       # Focus Room state machine + UDP protocol
-├── network/
-│   └── NetworkDiscoveryService.kt # UDP broadcast/listen, peer tracking, ghost mode
-├── review/
-│   └── ReviewNudgeService.kt     # One-time Marketplace review prompt after 3 days
-├── spotify/
-│   └── SpotifyMacService.kt      # All AppleScript calls to Spotify
-├── startup/
-│   └── MyProjectActivity.kt      # ProjectActivity — wires up services on project open
-├── statusbar/
-│   ├── MyStatusBarWidget.kt      # The entire UI: status bar panel + all popups
-│   └── MyStatusBarWidgetFactory.kt
-├── services/
-│   └── MyProjectService.kt       # Placeholder project service
-├── toolWindow/
-│   └── MyToolWindowFactory.kt    # Unused tool window stub
-└── MyBundle.kt                   # i18n bundle helper
+```bash
+# Compile Kotlin sources
+./gradlew compileKotlin
 
-src/main/resources/
-├── META-INF/plugin.xml           # Plugin descriptor, extension points, description
-├── messages/MyBundle.properties
-└── icons/                        # SVG icons, light + dark variants
+# Build the jar only (safe when sandbox IDE is open)
+./gradlew compileKotlin jar --no-daemon
+
+# Build the full plugin zip for distribution
+./gradlew buildPlugin --no-daemon
+
+# Run tests
+./gradlew check
+
+# Launch a sandbox IDE instance with the plugin loaded (for manual testing)
+./gradlew runIde
 ```
+
+**Correct JetBrains plugin zip structure** (one root folder, no nested zips):
+```
+Spotyy-0.0.4.zip
+└── Spotyy/
+    └── lib/
+        └── Spotyy-0.0.4.jar
+```
+
+`buildSearchableOptions`, `prepareJarSearchableOptions`, and `jarSearchableOptions` tasks are disabled in `build.gradle.kts` to prevent conflicts with running sandbox IDE instances.
 
 ---
 
@@ -152,33 +154,6 @@ All Spotify communication is via AppleScript (`osascript`). Key contract:
 | `javax.swing.Timer` | Status bar 3s poll + popup 1s refresh (fires on EDT) |
 
 **Rule:** Never do network I/O or AppleScript on the EDT. Always use `executeOnPooledThread` or a background thread, then `invokeLater` to update UI.
-
----
-
-## Build & Distribution
-
-```bash
-# Compile + build jar (works even when sandbox IDE is open)
-JAVA_HOME="C:/Users/sejal/.jdks/corretto-17.0.15" ./gradlew compileKotlin jar --no-daemon
-
-# Full plugin zip (fails if sandbox IDE has files locked)
-JAVA_HOME="C:/Users/sejal/.jdks/corretto-17.0.15" ./gradlew buildPlugin --no-daemon
-```
-
-**When `buildPlugin` fails** (sandbox file lock), patch the zip manually:
-1. Compile jar: `gradlew compileKotlin jar`
-2. Take the existing `build/distributions/Spotyy-0.0.5.zip` as a base
-3. Use PowerShell `System.IO.Compression.ZipFile` to rebuild with correct structure
-
-**Correct JetBrains plugin zip structure** (one root folder, no nested zips):
-```
-Spotyy-0.0.4.zip
-└── Spotyy/
-    └── lib/
-        └── Spotyy-0.0.4.jar
-```
-
-**JDK:** `corretto-17.0.15` at `C:/Users/sejal/.jdks/corretto-17.0.15`
 
 ---
 

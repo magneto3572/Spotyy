@@ -108,7 +108,7 @@ object OnboardingService {
 
         val dialog = JDialog()
         dialog.isUndecorated = true
-        dialog.modalityType  = Dialog.ModalityType.APPLICATION_MODAL
+        dialog.modalityType  = Dialog.ModalityType.MODELESS
         dialog.background    = Color(0, 0, 0, 0)
 
         val root = object : JPanel(BorderLayout()) {
