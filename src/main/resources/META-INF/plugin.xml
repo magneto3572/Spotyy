@@ -85,31 +85,22 @@
     ]]></description>
 
     <change-notes><![CDATA[
-      <h2>0.0.6</h2>
-      <ul>
-        <li><b>Fix IDE timeout on startup</b> — onboarding dialog is now modeless; no longer blocks the EDT, preventing a 10-minute IDE timeout during plugin installation tests</li>
-      </ul>
-
       <h2>0.0.5</h2>
       <ul>
         <li><b>Linux support</b> — Spotify playback controls now work on Linux via D-Bus / MPRIS2; Spotify is auto-launched if not already running</li>
         <li><b>First-run onboarding</b> — OS-aware setup walkthrough shown on first launch; guides you through installing Spotify, playerctl (Linux), and granting Automation permission (macOS), with one-click copy commands</li>
-        <li><b>Light mode UI fixes</b> — button hover color and separator are now theme-aware; no more black hover flash in light mode</li>
-        <li><b>Progress bar on theme switch</b> — progress bar no longer disappears when switching between dark and light themes</li>
-        <li><b>Vibe match midnight reset</b> — vibe match counter now resets at local midnight based on system clock</li>
-        <li><b>macOS: ~/Applications detection</b> — Spotify installed in the user Applications folder is now correctly detected</li>
-        <li><b>macOS: Automation permission alert</b> — shows a notification if the IDE is blocked from controlling Spotify, with instructions to fix it in System Settings</li>
-      </ul>
-
-      <h2>0.0.4</h2>
-      <ul>
         <li><b>Nearby room visibility</b> — non-members on the same network can now see active Focus Rooms: who's hosting, how many members are inside, and time remaining</li>
         <li><b>Focus Room</b> — shared countdown timer (25 / 45 / 60 min); host can invite peers and remove members at any time</li>
         <li><b>Listening nearby</b> — see teammates on the same network and what they're playing</li>
-        <li><b>Vibe match</b> — highlights when you're listening to the same song or artist as a teammate</li>
+        <li><b>Vibe match</b> — highlights when you're listening to the same song or artist as a teammate; resets at local midnight</li>
         <li><b>Ghost mode</b> — hide yourself from the network; automatically locked while in a Focus Room</li>
+        <li><b>Light mode UI fixes</b> — button hover color and separator are now theme-aware; no more black hover flash in light mode</li>
+        <li><b>Progress bar on theme switch</b> — progress bar no longer disappears when switching between dark and light themes</li>
+        <li><b>Fix onboarding EDT block</b> — onboarding dialog is modeless and no longer blocks the EDT on startup</li>
+        <li><b>Fix widget ID mismatch</b> — status bar widget now updates correctly on theme change</li>
+        <li><b>macOS: ~/Applications detection</b> — Spotify installed in the user Applications folder is now correctly detected</li>
+        <li><b>macOS: Automation permission alert</b> — shows a notification if the IDE is blocked from controlling Spotify</li>
         <li><b>Broader IDE compatibility</b> — supports IntelliJ 2022.3+ and Android Studio Giraffe and later</li>
-        <li><b>Popup layout fix</b> — peer panel now renders at a consistent fixed width on all machines</li>
       </ul>
     ]]></change-notes>
 

@@ -1463,7 +1463,7 @@ class MyStatusBarWidget : CustomStatusBarWidget {
         UIManager.put("StatusBarWidget.hoverBackground", null)
     }
 
-    override fun ID(): String = "MyStatusBarWidget"
+    override fun ID(): String = "com.github.magneto3572.spotyy.MyStatusBarWidget"
 
     override fun getComponent(): JComponent {
         return panel
