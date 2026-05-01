@@ -24,8 +24,6 @@
 
 ## 🚀 Features
 
-> **⚠️ Important:** This plugin is compatible **ONLY with macOS** and requires the Spotify desktop application to be
-> installed.
 >
 > Spotyy is a plugin for all JetBrains IDEs (IntelliJ IDEA, Android Studio, PyCharm, WebStorm, etc.) that lets you
 > control Spotify directly from your IDE status bar:
