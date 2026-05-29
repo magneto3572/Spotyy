@@ -7,14 +7,15 @@ object SpotifyServiceFactory {
     private fun create(): SpotifyService {
         val os = System.getProperty("os.name").lowercase()
         return when {
-            os.contains("mac") -> SpotifyMacService()
-            os.contains("linux") -> SpotifyLinuxService()
-            else -> NoOpSpotifyService()
+            os.contains("mac")     -> SpotifyMacService()
+            os.contains("linux")   -> SpotifyLinuxService()
+            os.contains("windows") -> SpotifyWindowsService()
+            else                   -> NoOpSpotifyService()
         }
     }
 }
 
-/** Returned on unsupported platforms (e.g. Windows). All controls are silent no-ops. */
+/** Returned on unsupported platforms. All controls are silent no-ops. */
 private class NoOpSpotifyService : SpotifyService {
     override fun getCurrentTrack() = SpotifyState(false, false, null, 50)
     override fun playPause() = Unit

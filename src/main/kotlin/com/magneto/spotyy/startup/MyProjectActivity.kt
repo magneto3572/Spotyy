@@ -16,6 +16,7 @@ import com.magneto.spotyy.review.ReviewNudgeService
 import com.magneto.spotyy.spotify.SpotifyLinuxService
 import com.magneto.spotyy.spotify.SpotifyMacService
 import com.magneto.spotyy.spotify.SpotifyServiceFactory
+import com.magneto.spotyy.spotify.SpotifyWindowsService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -56,6 +57,9 @@ class MyProjectActivity : ProjectActivity {
                             showAutomationPermissionNotification(project)
                         }
                     }
+                }
+                is SpotifyWindowsService -> {
+                    // SMTC requires no special permissions — nothing to check.
                 }
             }
         }

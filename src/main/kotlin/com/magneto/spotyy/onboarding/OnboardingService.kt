@@ -15,8 +15,9 @@ object OnboardingService {
 
     private const val KEY = "spotyy.onboarding.shown"
 
-    private val isMac   = System.getProperty("os.name").lowercase().contains("mac")
-    private val isLinux = System.getProperty("os.name").lowercase().contains("linux")
+    private val isMac     = System.getProperty("os.name").lowercase().contains("mac")
+    private val isLinux   = System.getProperty("os.name").lowercase().contains("linux")
+    private val isWindows = System.getProperty("os.name").lowercase().contains("windows")
 
     fun isSpotifyReady(): Boolean = isSpotifyInstalled()
 
@@ -59,10 +60,26 @@ object OnboardingService {
     }
 
     private fun isSpotifyInstalled(): Boolean = when {
-        isMac   -> File("/Applications/Spotify.app").exists()
-                || File("${System.getProperty("user.home")}/Applications/Spotify.app").exists()
-        isLinux -> which("spotify") || isSnapSpotify() || isFlatpakSpotify()
-        else    -> false
+        isMac     -> File("/Applications/Spotify.app").exists()
+                  || File("${System.getProperty("user.home")}/Applications/Spotify.app").exists()
+        isLinux   -> which("spotify") || isSnapSpotify() || isFlatpakSpotify()
+        isWindows -> isWindowsSpotifyInstalled()
+        else      -> false
+    }
+
+    private fun isWindowsSpotifyInstalled(): Boolean {
+        val appData = System.getenv("APPDATA") ?: return false
+        if (File("$appData\\Spotify\\Spotify.exe").exists()) return true
+        // Also check for Microsoft Store installation via PowerShell
+        return try {
+            val p = ProcessBuilder(
+                "powershell.exe", "-NonInteractive", "-NoProfile", "-Command",
+                "Get-AppxPackage -Name SpotifyAB.SpotifyMusic -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name"
+            ).start()
+            val out = p.inputStream.bufferedReader().readText()
+            p.waitFor(5, TimeUnit.SECONDS)
+            out.contains("spotify", ignoreCase = true)
+        } catch (_: Exception) { false }
     }
 
     private fun isPlayerctlInstalled(): Boolean = which("playerctl")
@@ -236,7 +253,7 @@ object OnboardingService {
         }
 
         // ── Header ────────────────────────────────────────────────────────────
-        val osName = if (isMac) "macOS" else "Linux"
+        val osName = when { isMac -> "macOS"; isWindows -> "Windows"; else -> "Linux" }
         stack.add(lbl("Welcome to Spotyy", stack.font.deriveFont(Font.BOLD, 17f), fg))
         stack.add(Box.createVerticalStrut(6))
         stack.add(lbl("One-time setup for $osName.", stack.font.deriveFont(13f), fgMuted))
@@ -322,6 +339,34 @@ object OnboardingService {
             card("✓", green, "AppleScript — No Setup Needed") {
                 add(lbl("Spotyy uses AppleScript to read track info and control", font.deriveFont(11f), fgMuted))
                 add(lbl("playback. This works automatically on macOS.", font.deriveFont(11f), fgMuted))
+            }
+
+        // ── Windows steps ─────────────────────────────────────────────────────
+        } else if (isWindows) {
+            if (spotifyOk) {
+                card("✓", green, "Spotify Desktop App") {
+                    add(lbl("Spotify is installed and ready.", font.deriveFont(11f), fgMuted))
+                }
+            } else {
+                card("✗", red, "Spotify Desktop App — Not Installed") {
+                    add(lbl("Download and install the Spotify desktop app:", font.deriveFont(11f), fgMuted))
+                    add(Box.createVerticalStrut(8))
+                    add(lbl("Option 1 — Direct download:", font.deriveFont(Font.BOLD, 10f), fgMuted))
+                    add(Box.createVerticalStrut(4))
+                    add(codeBlock("https://www.spotify.com/download/windows/"))
+                    add(Box.createVerticalStrut(8))
+                    add(lbl("Option 2 — Microsoft Store:", font.deriveFont(Font.BOLD, 10f), fgMuted))
+                    add(Box.createVerticalStrut(4))
+                    add(codeBlock("ms-windows-store://pdp/?ProductId=9NCBCSZSJRSB"))
+                    add(Box.createVerticalStrut(4))
+                    add(lbl("Copy the link above and paste it into the Run dialog (Win+R).", font.deriveFont(11f), fgMuted))
+                }
+            }
+
+            card("✓", green, "Windows Media Controls — No Setup Needed") {
+                add(lbl("Spotyy reads Spotify via Windows System Media Transport", font.deriveFont(11f), fgMuted))
+                add(lbl("Controls (SMTC). This works automatically on Windows 10", font.deriveFont(11f), fgMuted))
+                add(lbl("version 1903 (May 2019 Update) or later.", font.deriveFont(11f), fgMuted))
             }
 
         // ── Linux steps ───────────────────────────────────────────────────────

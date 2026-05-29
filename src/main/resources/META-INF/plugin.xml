@@ -15,7 +15,8 @@
 
       <p>
         <b>Note:</b> Requires the Spotify desktop app to be installed and running.
-        Playback controls work on <b>macOS</b> (via AppleScript) and <b>Linux</b> (via D-Bus / MPRIS2).
+        Playback controls work on <b>macOS</b> (via AppleScript), <b>Linux</b> (via D-Bus / MPRIS2),
+        and <b>Windows 10 version 1903+</b> (via System Media Transport Controls).
         The Spotify web player is not supported.
       </p>
 
@@ -47,7 +48,7 @@
       <h3>Getting Started</h3>
       <ol>
         <li>Install <b>Spotyy</b> and restart your IDE.</li>
-        <li>Open the <b>Spotify desktop app</b> on your Mac and start playing a track.</li>
+        <li>Open the <b>Spotify desktop app</b> and start playing a track.</li>
         <li>Open any project — the Spotyy widget appears automatically in the <b>bottom status bar</b>.</li>
         <li>Click the <b>👥</b> or <b>✦</b> button in the status bar to open the team panel.</li>
         <li>Use the playback buttons to control music and the volume icon to adjust level.</li>
@@ -57,7 +58,7 @@
 
       <h3>Requirements</h3>
       <ul>
-        <li><b>macOS</b> 10.15 Catalina or later — or — <b>Linux</b> with D-Bus (any modern distro)</li>
+        <li><b>macOS</b> 10.15 Catalina or later — or — <b>Linux</b> with D-Bus (any modern distro) — or — <b>Windows 10</b> version 1903 (May 2019 Update) or later</li>
         <li>Spotify desktop application (installed and running)</li>
         <li>Any JetBrains IDE: IntelliJ IDEA, Android Studio, PyCharm, WebStorm, CLion, GoLand, Rider, and more</li>
         <li>All users on the <b>same local network</b> (office Wi-Fi, shared LAN) to see each other</li>
@@ -75,6 +76,11 @@
         Optionally install <code>playerctl</code> for more reliable metadata parsing
         (<code>sudo apt install playerctl</code> / <code>sudo dnf install playerctl</code>).
       </p>
+      <p>
+        <b>Windows:</b> Spotyy reads Spotify via the Windows System Media Transport Controls (SMTC) API —
+        no extra permissions needed. Requires Windows 10 version 1903 or later and the Spotify desktop app
+        (either the direct download or Microsoft Store version).
+      </p>
 
       <hr/>
 
@@ -85,6 +91,13 @@
     ]]></description>
 
     <change-notes><![CDATA[
+      <h2>0.0.6</h2>
+      <ul>
+        <li><b>Windows support</b> — Spotify playback controls now work on Windows 10 version 1903 (May 2019 Update) and later via the System Media Transport Controls (SMTC) API; no extra setup or permissions required</li>
+        <li><b>Windows volume slider</b> — the volume slider is fully functional on Windows and controls the system master volume via the Windows Core Audio (WASAPI) API</li>
+        <li><b>Windows onboarding</b> — first-run setup dialog detects Spotify on Windows (direct install and Microsoft Store) and shows OS-appropriate instructions</li>
+      </ul>
+
       <h2>0.0.5</h2>
       <ul>
         <li><b>Linux support</b> — Spotify playback controls now work on Linux via D-Bus / MPRIS2; Spotify is auto-launched if not already running</li>

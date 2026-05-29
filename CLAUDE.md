@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Spotyy** is a JetBrains IDE plugin (Kotlin, IntelliJ Platform SDK) that embeds Spotify playback controls into the IDE status bar and adds a **local-network team music layer** — users on the same Wi-Fi can see what teammates are listening to, get vibe-match highlights, and collaborate in shared Focus Rooms.
 
-- **Platform:** macOS only (uses AppleScript to talk to the Spotify desktop app)
+- **Platform:** macOS (AppleScript), Linux (D-Bus / MPRIS2), Windows 10 1903+ (SMTC + WASAPI)
 - **Plugin ID:** `com.github.magneto3572.spotyy`
-- **Current version:** `0.0.4` (in `gradle.properties`)
+- **Current version:** `0.0.6` (in `gradle.properties`)
 - **Supported IDEs:** IntelliJ 2022.3+ (`pluginSinceBuild = 231`), Android Studio Giraffe+, all JetBrains IDEs
 - **Build tool:** Gradle + IntelliJ Platform Gradle Plugin (JDK 17)
 
@@ -57,7 +57,7 @@ Runs once per project open on an IO coroutine:
 ### 2. Status Bar Widget (`MyStatusBarWidget`)
 - Registered via `MyStatusBarWidgetFactory` as a `CustomStatusBarWidget`
 - Creates a `JPanel` with playback buttons + "Now Playing" label + peers button
-- A **3-second `javax.swing.Timer`** polls Spotify (via `SpotifyMacService`) and broadcasts the track over UDP
+- A **3-second `javax.swing.Timer`** polls Spotify (via the platform `SpotifyService`) and broadcasts the track over UDP
 - A **separate popup refresh timer** (1-second) ticks countdown timers and detects peer/room changes
 
 ### 3. Network Layer (`NetworkDiscoveryService`)
@@ -133,13 +133,25 @@ val maxTrackPx = popupWidth - 28 - 38 - 20 - (if (hasInviteBtn) 74 else 0) - 4
 
 ---
 
-## Spotify Integration (`SpotifyMacService`)
+## Spotify Integration
 
-All Spotify communication is via AppleScript (`osascript`). Key contract:
+All platform services implement `SpotifyService` and are created by `SpotifyServiceFactory` based on `os.name`.
+
+**macOS — `SpotifyMacService`** (AppleScript / `osascript`)
 - `getCurrentTrack()` → `SpotifyState(isRunning, isPlaying, trackInfo, volume)`
 - `trackInfo` format: `"Artist - Track Name"`
 - All AppleScript calls run on a daemon thread with a 3-second process timeout and 5-second future timeout
 - `setVolume()` dispatches to a pooled thread to avoid blocking EDT
+
+**Linux — `SpotifyLinuxService`** (D-Bus / MPRIS2, with `playerctl` preferred)
+- Falls back from `playerctl` → raw `dbus-send` if playerctl is absent
+- Snap Spotify is blocked by AppArmor; `snapPermissionBlocked` flag triggers an install-fix notification
+
+**Windows — `SpotifyWindowsService`** (PowerShell subprocesses, no extra dependencies)
+- Track/playback/progress — Windows System Media Transport Controls (SMTC) via WinRT, requires Windows 10 1903+
+- Volume get/set — Windows Core Audio (WASAPI) via inline `Add-Type` C# COM stubs; controls system master volume (SMTC has no volume API)
+- Filters SMTC sessions by `SourceAppUserModelId` containing `"spotify"` to avoid reading the wrong app
+- `cachedVolume` is updated every 3 s by `getCurrentTrack()` so `getVolume()`/`increaseVolume()`/`decreaseVolume()` need no extra PowerShell round-trip
 
 ---
 
@@ -149,17 +161,17 @@ All Spotify communication is via AppleScript (`osascript`). Key contract:
 |---|---|
 | EDT | All Swing UI, popup creation, timer callbacks (`invokeLater`) |
 | `Spotyy-Discovery` daemon | UDP socket listen loop (`NetworkDiscoveryService`) |
-| Pooled (IntelliJ) | AppleScript calls, UDP broadcast sends, `FocusRoomService.invitePeer()` |
+| Pooled (IntelliJ) | AppleScript / PowerShell calls, UDP broadcast sends, `FocusRoomService.invitePeer()` |
 | Coroutine IO (`Dispatchers.IO`) | `MyProjectActivity.execute()` startup |
 | `javax.swing.Timer` | Status bar 3s poll + popup 1s refresh (fires on EDT) |
 
-**Rule:** Never do network I/O or AppleScript on the EDT. Always use `executeOnPooledThread` or a background thread, then `invokeLater` to update UI.
+**Rule:** Never do network I/O, AppleScript, or PowerShell calls on the EDT. Always use `executeOnPooledThread` or a background thread, then `invokeLater` to update UI.
 
 ---
 
 ## Key Constraints & Gotchas
 
-1. **macOS only** — all Spotify communication is via AppleScript; no Windows/Linux support
+1. **Platform-specific backends** — macOS uses AppleScript, Linux uses D-Bus/playerctl, Windows uses SMTC + WASAPI via PowerShell; each spawns subprocesses on background threads
 2. **UDP is unreliable** — always design for packet loss; PING every 3s + 10s timeout is the heartbeat
 3. **Same subnet required** — most routers drop 255.255.255.255 limited broadcast; `NetworkDiscoveryService` iterates all active non-loopback interfaces to get subnet broadcast addresses (e.g. 192.168.1.255)
 4. **BoxLayout Y_AXIS width** — child width = `min(max(child.minWidth, container.width), child.maxWidth)`. If `child.minWidth > container.width`, the child overflows. Always set BOTH `minimumSize` and `maximumSize` on every stack child to pin width to exactly `popupWidth = 300`
