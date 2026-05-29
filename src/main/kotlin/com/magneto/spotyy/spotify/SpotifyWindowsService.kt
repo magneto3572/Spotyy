@@ -12,28 +12,86 @@ class SpotifyWindowsService : SpotifyService {
     // Kept in sync by getCurrentTrack() so getVolume()/increaseVolume()/decreaseVolume()
     // can operate without an extra PowerShell round-trip.
     @Volatile private var cachedVolume = 50
+    @Volatile private var volumePollTick = 0
+    @Volatile private var lastKnownRunning = false
 
     override fun getCurrentTrack(): SpotifyState {
+        // Refresh system volume every ~30 s (every 10th 3-second poll).
+        // Done separately so Add-Type C# compilation never blocks the metadata fetch.
+        if (volumePollTick++ % 10 == 0) {
+            ApplicationManager.getApplication().executeOnPooledThread {
+                runPowerShell(GET_VOLUME_SCRIPT)?.toIntOrNull()?.let { cachedVolume = it }
+            }
+        }
+
         val result = runPowerShell(GET_TRACK_SCRIPT)
             ?: return SpotifyState(false, false, null, cachedVolume)
 
-        val parts = result.split("|", limit = 6)
-        if (parts.size < 4) return SpotifyState(false, false, null, cachedVolume)
+        val parts = result.split("|", limit = 5)
+        if (parts.size < 3) return SpotifyState(false, false, null, cachedVolume)
 
         val isRunning  = parts[0] == "1"
         val isPlaying  = parts[1] == "playing"
-        val volume     = parts.getOrNull(2)?.toIntOrNull() ?: cachedVolume
-        val trackInfo  = parts[3].trim().takeIf { it.isNotBlank() }
-        val positionMs = parts.getOrNull(4)?.toDoubleOrNull()?.toLong() ?: 0L
-        val durationMs = parts.getOrNull(5)?.toDoubleOrNull()?.toLong() ?: 0L
+        val trackInfo  = parts[2].trim().takeIf { it.isNotBlank() }
+        val positionMs = parts.getOrNull(3)?.toDoubleOrNull()?.toLong() ?: 0L
+        val durationMs = parts.getOrNull(4)?.toDoubleOrNull()?.toLong() ?: 0L
 
-        cachedVolume = volume
-        return SpotifyState(isRunning, isPlaying, trackInfo, volume, positionMs, durationMs)
+        lastKnownRunning = isRunning
+        return SpotifyState(isRunning, isPlaying, trackInfo, cachedVolume, positionMs, durationMs)
     }
 
-    override fun playPause()     { runPowerShellAsync(buildControlScript("TryTogglePlayPauseAsync")) }
+    override fun playPause() {
+        if (lastKnownRunning) {
+            // Fast path: Spotify was running at last poll
+            runPowerShellAsync(buildControlScript("TryTogglePlayPauseAsync"))
+            return
+        }
+        // lastKnownRunning is false (either Spotify is down, or metadata polling hasn't
+        // succeeded yet). Do a quick process check to decide: toggle vs launch.
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val out = runPowerShell(
+                "(Get-Process -Name Spotify -ErrorAction SilentlyContinue) -ne \$null"
+            )
+            val running = out?.trim()?.equals("True", ignoreCase = true) == true
+            if (running) {
+                runPowerShell(buildControlScript("TryTogglePlayPauseAsync"))
+                lastKnownRunning = true
+            } else {
+                launchSpotifyAndPlay()
+            }
+        }
+    }
+
     override fun nextTrack()     { runPowerShellAsync(buildControlScript("TrySkipNextAsync")) }
     override fun previousTrack() { runPowerShellAsync(buildControlScript("TrySkipPreviousAsync")) }
+
+    private fun launchSpotifyAndPlay() {
+        try {
+            // spotify: URI works for both direct-installer and MS Store builds
+            ProcessBuilder("cmd.exe", "/c", "start", "", "spotify:")
+                .redirectErrorStream(true).start()
+        } catch (e: Exception) {
+            logger.warn("Failed to launch Spotify", e)
+            return
+        }
+
+        // Poll every 1 s for up to 20 s for the Spotify process to appear
+        val deadline = System.currentTimeMillis() + 20_000L
+        while (System.currentTimeMillis() < deadline) {
+            Thread.sleep(1000)
+            val out = runPowerShell(
+                "(Get-Process -Name Spotify -ErrorAction SilentlyContinue) -ne \$null"
+            )
+            if (out?.trim().equals("True", ignoreCase = true)) {
+                // Give SMTC 2 s to register the session before sending the play command
+                Thread.sleep(2000)
+                runPowerShell(buildControlScript("TryTogglePlayPauseAsync"))
+                lastKnownRunning = true
+                return
+            }
+        }
+        logger.warn("Spotify did not start within 20 s")
+    }
 
     override fun getVolume() = cachedVolume
 
@@ -57,12 +115,18 @@ class SpotifyWindowsService : SpotifyService {
         val thread = Thread {
             try {
                 val process = ProcessBuilder(
-                    "powershell.exe", "-NonInteractive", "-NoProfile", "-Command", script
+                    // -MTA forces MTA apartment mode. powershell.exe defaults to STA, where
+                    // Task.Wait(-1) deadlocks when a WinRT completion callback tries to marshal
+                    // back onto the blocked STA thread. MTA lets completions fire on any
+                    // thread-pool thread, so the Await helper works correctly.
+                    "powershell.exe", "-MTA", "-NonInteractive", "-NoProfile", "-Command", script
                 ).redirectErrorStream(false).start()
 
                 val output = process.inputStream.bufferedReader().use { it.readText() }
                 val error  = process.errorStream.bufferedReader().use { it.readText() }
-                val exited = process.waitFor(5, TimeUnit.SECONDS)
+                // WinRT assembly load + RequestAsync() cold-start: 1.5–4 s in a fresh process.
+                // 10 s gives comfortable headroom even on slow machines.
+                val exited = process.waitFor(10, TimeUnit.SECONDS)
 
                 if (!exited) {
                     process.destroy()
@@ -80,7 +144,7 @@ class SpotifyWindowsService : SpotifyService {
         thread.isDaemon = true
         thread.start()
         return try {
-            future.get(8, TimeUnit.SECONDS)
+            future.get(13, TimeUnit.SECONDS)
         } catch (e: Exception) {
             logger.warn("PowerShell timed out or interrupted", e)
             thread.interrupt()
@@ -181,29 +245,38 @@ ${'$'}session = ${'$'}mgr.GetCurrentSession()
 if (${'$'}session -and ${'$'}session.SourceAppUserModelId -and ${'$'}session.SourceAppUserModelId -notlike '*spotify*') { ${'$'}session = ${'$'}null }
 """.trimIndent()
 
-        // Single PowerShell call that returns both the system volume (WASAPI) and
-        // Spotify playback state (SMTC) as a pipe-delimited string:
-        //   isRunning|status|volume|trackInfo|positionMs|durationMs
+        // SMTC-only metadata poll — no Add-Type/C# compilation so it completes well within timeout.
+        // Format: isRunning|status|trackInfo|positionMs|durationMs
+        // Volume is fetched separately via GET_VOLUME_SCRIPT to avoid blocking this path.
         private val GET_TRACK_SCRIPT = """
-$AUDIO_TYPE_DEF
-${'$'}vol = try { [AudioManager]::GetVolume() } catch { 50 }
 $SMTC_SETUP
 if (-not ${'$'}session) {
     ${'$'}running = (Get-Process -Name Spotify -ErrorAction SilentlyContinue) -ne ${'$'}null
-    if (${'$'}running) { Write-Output "1|paused|${'$'}vol||0|0" } else { Write-Output "0|stopped|${'$'}vol||0|0" }
+    if (${'$'}running) { Write-Output "1|paused||0|0" } else { Write-Output "0|stopped||0|0" }
     exit
 }
-${'$'}props    = Await (${'$'}session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsMediaProperties])
-${'$'}timeline = ${'$'}session.GetTimelineProperties()
-${'$'}playback = ${'$'}session.GetPlaybackInfo()
-${'$'}playing  = ${'$'}playback.PlaybackStatus -eq [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus]::Playing
-${'$'}posMs    = [long]${'$'}timeline.Position.TotalMilliseconds
-${'$'}endMs    = [long]${'$'}timeline.EndTime.TotalMilliseconds
-${'$'}status   = if (${'$'}playing) { 'playing' } else { 'paused' }
-${'$'}artist   = ${'$'}props.Artist
-${'$'}title    = ${'$'}props.Title
-${'$'}track    = if (${'$'}artist) { "${'$'}artist - ${'$'}title" } else { ${'$'}title }
-Write-Output "1|${'$'}status|${'$'}vol|${'$'}track|${'$'}posMs|${'$'}endMs"
+try {
+    ${'$'}props    = Await (${'$'}session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsMediaProperties])
+    ${'$'}timeline = ${'$'}session.GetTimelineProperties()
+    ${'$'}playback = ${'$'}session.GetPlaybackInfo()
+    ${'$'}playing  = ${'$'}playback.PlaybackStatus -eq [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus]::Playing
+    ${'$'}posMs    = [long]${'$'}timeline.Position.TotalMilliseconds
+    ${'$'}endMs    = [long]${'$'}timeline.EndTime.TotalMilliseconds
+    if (${'$'}endMs -eq 0) { ${'$'}endMs = [long]${'$'}timeline.MaxSeekTime.TotalMilliseconds }
+    ${'$'}status   = if (${'$'}playing) { 'playing' } else { 'paused' }
+    ${'$'}artist   = ${'$'}props.Artist
+    ${'$'}title    = ${'$'}props.Title
+    ${'$'}track    = if (${'$'}artist) { "${'$'}artist - ${'$'}title" } else { ${'$'}title }
+    Write-Output "1|${'$'}status|${'$'}track|${'$'}posMs|${'$'}endMs"
+} catch {
+    Write-Output "1|paused||0|0"
+}
+""".trimIndent()
+
+        // Standalone volume fetch — uses Add-Type C# compilation but runs off the hot path.
+        private val GET_VOLUME_SCRIPT = """
+$AUDIO_TYPE_DEF
+try { Write-Output ([AudioManager]::GetVolume()) } catch { Write-Output 50 }
 """.trimIndent()
 
         private fun buildSetVolumeScript(volume: Int) = """

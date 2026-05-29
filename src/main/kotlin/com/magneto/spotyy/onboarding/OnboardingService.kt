@@ -13,11 +13,15 @@ import javax.swing.*
 
 object OnboardingService {
 
-    private const val KEY = "spotyy.onboarding.shown"
+    // Platform-specific keys so showing on one OS doesn't suppress the dialog on another.
+    private const val KEY         = "spotyy.onboarding.shown"
+    private const val KEY_WINDOWS = "spotyy.onboarding.shown.windows"
 
     private val isMac     = System.getProperty("os.name").lowercase().contains("mac")
     private val isLinux   = System.getProperty("os.name").lowercase().contains("linux")
     private val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+
+    private fun shownKey() = if (isWindows) KEY_WINDOWS else KEY
 
     fun isSpotifyReady(): Boolean = isSpotifyInstalled()
 
@@ -35,12 +39,8 @@ object OnboardingService {
         ApplicationManager.getApplication().executeOnPooledThread {
             val spotifyOk   = isSpotifyInstalled()
             val playerctlOk = if (isLinux) isPlayerctlInstalled() else true
-            val alreadyShownAndAllGood = PropertiesComponent.getInstance().getBoolean(KEY, false)
 
-            // Skip if already completed setup successfully before
-            if (alreadyShownAndAllGood) return@executeOnPooledThread
-
-            // Always show if Spotify is missing — user may have clicked Get Started without installing
+            // Always show if Spotify is missing, regardless of prior shown state
             if (!spotifyOk) {
                 ApplicationManager.getApplication().invokeLater {
                     showDialog(spotifyOk, playerctlOk)
@@ -48,12 +48,12 @@ object OnboardingService {
                 return@executeOnPooledThread
             }
 
-            // Spotify is installed — show once if never shown, then permanently suppress
-            val shown = PropertiesComponent.getInstance().getBoolean(KEY, false)
+            // Spotify is ready — show once per platform, then suppress
+            val shown = PropertiesComponent.getInstance().getBoolean(shownKey(), false)
             if (!shown) {
                 ApplicationManager.getApplication().invokeLater {
                     showDialog(spotifyOk, playerctlOk)
-                    PropertiesComponent.getInstance().setValue(KEY, true)
+                    PropertiesComponent.getInstance().setValue(shownKey(), true)
                 }
             }
         }
