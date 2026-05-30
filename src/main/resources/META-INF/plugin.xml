@@ -92,10 +92,15 @@
 
     <change-notes><![CDATA[
       <h2>0.0.6</h2>
+      <p><b>Windows support</b> — Spotyy now runs on all three major desktop platforms: macOS, Linux, and Windows.</p>
       <ul>
-        <li><b>Windows support</b> — Spotify playback controls now work on Windows 10 version 1903 (May 2019 Update) and later via the System Media Transport Controls (SMTC) API; no extra setup or permissions required</li>
-        <li><b>Windows volume slider</b> — the volume slider is fully functional on Windows and controls the system master volume via the Windows Core Audio (WASAPI) API</li>
-        <li><b>Windows onboarding</b> — first-run setup dialog detects Spotify on Windows (direct install and Microsoft Store) and shows OS-appropriate instructions</li>
+        <li><b>Windows playback controls</b> — play / pause, next, previous, and live "Now Playing" metadata work on Windows 10 version 1903 (May 2019 Update) and later via the System Media Transport Controls (SMTC) API; no extra setup, drivers, or permissions required</li>
+        <li><b>Track progress on Windows</b> — the status-bar progress bar reflects real playback position and duration reported by SMTC</li>
+        <li><b>Windows volume slider</b> — fully functional and wired to the system master volume through the Windows Core Audio (WASAPI) API</li>
+        <li><b>Auto-launch Spotify</b> — pressing play while Spotify is closed starts the desktop app and begins playback; supports both the direct-download and Microsoft Store builds</li>
+        <li><b>Reliable session detection</b> — Spotyy locks onto the Spotify media session even when other apps (e.g. a browser) are also playing audio, and correctly ignores lingering Store background processes</li>
+        <li><b>Windows onboarding</b> — first-run setup detects Spotify on Windows (direct install and Microsoft Store) and shows OS-appropriate guidance; tracked separately per platform</li>
+        <li><b>Silent background calls</b> — all PowerShell-based reads and controls run hidden on background threads, with no console-window flicker and no impact on editor performance</li>
       </ul>
 
       <h2>0.0.5</h2>

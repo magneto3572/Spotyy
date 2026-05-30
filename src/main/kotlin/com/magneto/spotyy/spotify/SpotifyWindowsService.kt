@@ -13,7 +13,22 @@ class SpotifyWindowsService : SpotifyService {
     // can operate without an extra PowerShell round-trip.
     @Volatile private var cachedVolume = 50
     @Volatile private var volumePollTick = 0
-    @Volatile private var lastKnownRunning = false
+    // True when the last poll found a controllable Spotify SMTC media session. This is NOT
+    // the same as "a *spotify* process exists" — the MS Store build leaves a background
+    // SpotifyWidgetProvider process running even when fully closed, which is not controllable.
+    // Toggle vs. launch decisions key off this, never off process presence.
+    @Volatile private var lastKnownHasSession = false
+
+    // Checked once at first playPause call; Spotify install location doesn't change at runtime.
+    private val spotifyExe: java.io.File? by lazy {
+        val appData   = System.getenv("APPDATA")   ?: return@lazy null
+        val localData = System.getenv("LOCALAPPDATA") ?: return@lazy null
+        listOf(
+            java.io.File("$appData\\Spotify\\Spotify.exe"),
+            // MS Store version ships an app-execution-alias at this path
+            java.io.File("$localData\\Microsoft\\WindowsApps\\Spotify.exe")
+        ).firstOrNull { it.exists() }
+    }
 
     override fun getCurrentTrack(): SpotifyState {
         // Refresh system volume every ~30 s (every 10th 3-second poll).
@@ -36,61 +51,68 @@ class SpotifyWindowsService : SpotifyService {
         val positionMs = parts.getOrNull(3)?.toDoubleOrNull()?.toLong() ?: 0L
         val durationMs = parts.getOrNull(4)?.toDoubleOrNull()?.toLong() ?: 0L
 
-        lastKnownRunning = isRunning
+        lastKnownHasSession = isRunning
         return SpotifyState(isRunning, isPlaying, trackInfo, cachedVolume, positionMs, durationMs)
     }
 
     override fun playPause() {
-        if (lastKnownRunning) {
-            // Fast path: Spotify was running at last poll
+        if (lastKnownHasSession) {
+            // Fast path: a controllable SMTC session existed at the last poll.
             runPowerShellAsync(buildControlScript("TryTogglePlayPauseAsync"))
             return
         }
-        // lastKnownRunning is false (either Spotify is down, or metadata polling hasn't
-        // succeeded yet). Do a quick process check to decide: toggle vs launch.
+        // No known session (Spotify closed, or polling hasn't succeeded yet). Decide toggle
+        // vs. launch by checking for a real SMTC session — NOT process presence, because the
+        // MS Store build leaves SpotifyWidgetProvider running even when fully closed, which
+        // would be a false "running" and result in a no-op toggle instead of launching.
         ApplicationManager.getApplication().executeOnPooledThread {
-            val out = runPowerShell(
-                "(Get-Process -Name Spotify -ErrorAction SilentlyContinue) -ne \$null"
-            )
-            val running = out?.trim()?.equals("True", ignoreCase = true) == true
-            if (running) {
+            if (runPowerShell(HAS_SESSION_SCRIPT)?.trim() == "1") {
                 runPowerShell(buildControlScript("TryTogglePlayPauseAsync"))
-                lastKnownRunning = true
+                lastKnownHasSession = true
             } else {
                 launchSpotifyAndPlay()
             }
         }
     }
 
-    override fun nextTrack()     { runPowerShellAsync(buildControlScript("TrySkipNextAsync")) }
-    override fun previousTrack() { runPowerShellAsync(buildControlScript("TrySkipPreviousAsync")) }
+    override fun nextTrack() {
+        if (lastKnownHasSession) runPowerShellAsync(buildControlScript("TrySkipNextAsync"))
+    }
+
+    override fun previousTrack() {
+        if (lastKnownHasSession) runPowerShellAsync(buildControlScript("TrySkipPreviousAsync"))
+    }
 
     private fun launchSpotifyAndPlay() {
         try {
-            // spotify: URI works for both direct-installer and MS Store builds
-            ProcessBuilder("cmd.exe", "/c", "start", "", "spotify:")
-                .redirectErrorStream(true).start()
+            val exe = spotifyExe
+            // WindowsApps entries are app-execution-aliases (reparse points) — they can't be
+            // started as a subprocess. Use the URI handler for Store builds; direct exe otherwise.
+            if (exe != null && !exe.absolutePath.contains("WindowsApps", ignoreCase = true)) {
+                ProcessBuilder(exe.absolutePath).redirectErrorStream(true).start()
+            } else {
+                ProcessBuilder("cmd.exe", "/c", "start", "", "spotify:")
+                    .redirectErrorStream(true).start()
+            }
         } catch (e: Exception) {
             logger.warn("Failed to launch Spotify", e)
             return
         }
 
-        // Poll every 1 s for up to 20 s for the Spotify process to appear
+        // Spotify cold-starts in a few seconds, but a controllable SMTC session only
+        // registers once a track is loaded. Poll for the SESSION (not just any process —
+        // the lingering SpotifyWidgetProvider would be a false positive). Once it appears,
+        // toggle playback. If none appears, the window is still open — the launch succeeded.
         val deadline = System.currentTimeMillis() + 20_000L
         while (System.currentTimeMillis() < deadline) {
-            Thread.sleep(1000)
-            val out = runPowerShell(
-                "(Get-Process -Name Spotify -ErrorAction SilentlyContinue) -ne \$null"
-            )
-            if (out?.trim().equals("True", ignoreCase = true)) {
-                // Give SMTC 2 s to register the session before sending the play command
-                Thread.sleep(2000)
+            Thread.sleep(1500)
+            if (runPowerShell(HAS_SESSION_SCRIPT)?.trim() == "1") {
                 runPowerShell(buildControlScript("TryTogglePlayPauseAsync"))
-                lastKnownRunning = true
+                lastKnownHasSession = true
                 return
             }
         }
-        logger.warn("Spotify did not start within 20 s")
+        logger.info("Spotify launched but no media session registered within 20 s (no track loaded)")
     }
 
     override fun getVolume() = cachedVolume
@@ -113,13 +135,28 @@ class SpotifyWindowsService : SpotifyService {
     private fun runPowerShell(script: String): String? {
         val future = CompletableFuture<String?>()
         val thread = Thread {
+            // Write to a temp .ps1 file so the script reaches PowerShell verbatim —
+            // passing complex scripts via -Command causes Windows to strip embedded
+            // double-quotes during command-line argument processing, breaking pipe-
+            // delimited Write-Output calls like `Write-Output "1|paused||0|0"`.
+            var tempFile: java.io.File? = null
             try {
+                tempFile = java.io.File.createTempFile("spotyy_ps_", ".ps1")
+                tempFile.deleteOnExit()
+                tempFile.writeText(script, Charsets.UTF_8)
+
                 val process = ProcessBuilder(
                     // -MTA forces MTA apartment mode. powershell.exe defaults to STA, where
                     // Task.Wait(-1) deadlocks when a WinRT completion callback tries to marshal
                     // back onto the blocked STA thread. MTA lets completions fire on any
                     // thread-pool thread, so the Await helper works correctly.
-                    "powershell.exe", "-MTA", "-NonInteractive", "-NoProfile", "-Command", script
+                    // -WindowStyle Hidden suppresses the console window that would otherwise
+                    // flash on every poll/control call (the sandbox/IDE java.exe has no console
+                    // of its own, so each console child would allocate and show a fresh window).
+                    "powershell.exe", "-MTA", "-WindowStyle", "Hidden",
+                    "-NonInteractive", "-NoProfile",
+                    "-ExecutionPolicy", "Bypass",
+                    "-File", tempFile.absolutePath
                 ).redirectErrorStream(false).start()
 
                 val output = process.inputStream.bufferedReader().use { it.readText() }
@@ -139,6 +176,8 @@ class SpotifyWindowsService : SpotifyService {
             } catch (e: Exception) {
                 logger.warn("PowerShell execution failed", e)
                 future.completeExceptionally(e)
+            } finally {
+                tempFile?.delete()
             }
         }
         thread.isDaemon = true
@@ -227,6 +266,8 @@ public static class AudioManager {
         // Loads the WinRT assembly and defines an Await helper that bridges
         // IAsyncOperation<T> to a blocking .NET Task (mirrors AppleScript via osascript on Mac).
         // After this block, $session is a Spotify SMTC session or $null.
+        // Uses GetSessions() (all sessions) instead of GetCurrentSession() so Spotify is found
+        // even when it isn't the active media source (e.g. browser also playing audio).
         private val SMTC_SETUP = """
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 ${'$'}asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
@@ -240,9 +281,11 @@ function Await(${'$'}Op, ${'$'}T) {
     ${'$'}task.Result
 }
 [void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]
-${'$'}mgr     = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
-${'$'}session = ${'$'}mgr.GetCurrentSession()
-if (${'$'}session -and ${'$'}session.SourceAppUserModelId -and ${'$'}session.SourceAppUserModelId -notlike '*spotify*') { ${'$'}session = ${'$'}null }
+${'$'}mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+${'$'}session = ${'$'}null
+foreach (${'$'}s in ${'$'}mgr.GetSessions()) {
+    if (${'$'}s.SourceAppUserModelId -like '*spotify*') { ${'$'}session = ${'$'}s; break }
+}
 """.trimIndent()
 
         // SMTC-only metadata poll — no Add-Type/C# compilation so it completes well within timeout.
@@ -251,22 +294,26 @@ if (${'$'}session -and ${'$'}session.SourceAppUserModelId -and ${'$'}session.Sou
         private val GET_TRACK_SCRIPT = """
 $SMTC_SETUP
 if (-not ${'$'}session) {
-    ${'$'}running = (Get-Process -Name Spotify -ErrorAction SilentlyContinue) -ne ${'$'}null
-    if (${'$'}running) { Write-Output "1|paused||0|0" } else { Write-Output "0|stopped||0|0" }
+    # No controllable SMTC session. Report not-running regardless of stray spotify
+    # background processes (e.g. SpotifyWidgetProvider, which the MS Store build keeps
+    # alive even when fully closed) - they are not controllable and must trigger a launch.
+    Write-Output "0|stopped||0|0"
     exit
 }
 try {
-    ${'$'}props    = Await (${'$'}session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsMediaProperties])
-    ${'$'}timeline = ${'$'}session.GetTimelineProperties()
-    ${'$'}playback = ${'$'}session.GetPlaybackInfo()
-    ${'$'}playing  = ${'$'}playback.PlaybackStatus -eq [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionPlaybackStatus]::Playing
-    ${'$'}posMs    = [long]${'$'}timeline.Position.TotalMilliseconds
-    ${'$'}endMs    = [long]${'$'}timeline.EndTime.TotalMilliseconds
+    ${'$'}smgrAsm   = ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]).Assembly
+    ${'$'}propsType = ${'$'}smgrAsm.GetType('Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties')
+    ${'$'}props     = Await (${'$'}session.TryGetMediaPropertiesAsync()) ${'$'}propsType
+    ${'$'}timeline  = ${'$'}session.GetTimelineProperties()
+    ${'$'}playback  = ${'$'}session.GetPlaybackInfo()
+    ${'$'}playing   = ${'$'}playback.PlaybackStatus.ToString() -eq 'Playing'
+    ${'$'}posMs     = [long]${'$'}timeline.Position.TotalMilliseconds
+    ${'$'}endMs     = [long]${'$'}timeline.EndTime.TotalMilliseconds
     if (${'$'}endMs -eq 0) { ${'$'}endMs = [long]${'$'}timeline.MaxSeekTime.TotalMilliseconds }
-    ${'$'}status   = if (${'$'}playing) { 'playing' } else { 'paused' }
-    ${'$'}artist   = ${'$'}props.Artist
-    ${'$'}title    = ${'$'}props.Title
-    ${'$'}track    = if (${'$'}artist) { "${'$'}artist - ${'$'}title" } else { ${'$'}title }
+    ${'$'}status    = if (${'$'}playing) { 'playing' } else { 'paused' }
+    ${'$'}artist    = ${'$'}props.Artist
+    ${'$'}title     = ${'$'}props.Title
+    ${'$'}track     = if (${'$'}artist) { "${'$'}artist - ${'$'}title" } else { ${'$'}title }
     Write-Output "1|${'$'}status|${'$'}track|${'$'}posMs|${'$'}endMs"
 } catch {
     Write-Output "1|paused||0|0"
@@ -287,6 +334,13 @@ $AUDIO_TYPE_DEF
         private fun buildControlScript(method: String) = """
 $SMTC_SETUP
 if (${'$'}session) { Await (${'$'}session.$method()) ([bool]) | Out-Null }
+""".trimIndent()
+
+        // Emits "1" if a controllable Spotify SMTC session exists, "0" otherwise. Used to
+        // decide toggle-vs-launch without being fooled by lingering background processes.
+        private val HAS_SESSION_SCRIPT = """
+$SMTC_SETUP
+if (${'$'}session) { Write-Output "1" } else { Write-Output "0" }
 """.trimIndent()
     }
 }
