@@ -1,4 +1,4 @@
-
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 
 plugins {
     id("java") // Java support
@@ -49,6 +49,15 @@ intellijPlatform {
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
             untilBuild = provider { null }
+        }
+    }
+
+    pluginVerification {
+        ides {
+            // Pin concrete, published builds: the sinceBuild floor (231 / 2023.1)
+            // and the platform the plugin compiles against (2024.2.5).
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2023.1")
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.5")
         }
     }
 }
