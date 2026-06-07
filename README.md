@@ -19,6 +19,8 @@
   <img src="https://img.shields.io/badge/Android%20Studio-compatible-green.svg" alt="Android Studio Compatible"/>
   <img src="https://img.shields.io/badge/JetBrains%20IDEs-compatible-orange.svg" alt="JetBrains IDEs Compatible"/>
   <img src="https://img.shields.io/badge/platform-macOS-lightgrey" alt="Platform macOS"/>
+  <img src="https://img.shields.io/badge/platform-Windows-blue" alt="Platform Windows"/>
+  <img src="https://img.shields.io/badge/platform-Linux-yellow" alt="Platform Linux"/>
   <img src="https://img.shields.io/badge/Spotify-integration-1DB954.svg" alt="Spotify Integration"/>
 </p>
 
@@ -54,9 +56,21 @@
 
 ## 📝 Requirements
 
-- **macOS ONLY** - This plugin uses AppleScript to communicate with Spotify and is not compatible with Windows or Linux
+- **Cross-platform** - This plugin now runs on **macOS**, **Windows**, and **Linux**. It talks to your local Spotify
+  client using each operating system's native control mechanism, so the same controls work everywhere.
 - **Spotify desktop application** must be installed (not just the web player)
 - Any JetBrains IDE (IntelliJ IDEA, Android Studio, PyCharm, WebStorm, etc.)
+
+## 🖥️ Platform Support
+
+Spotyy communicates with Spotify through the control mechanism that is native to each operating system. No extra setup
+is required on any platform — the plugin detects the right integration automatically.
+
+- **macOS** — Uses **AppleScript** to send commands to and read state from the Spotify desktop application.
+- **Linux** — Uses the **MPRIS2** media-player interface over **D-Bus** to control playback and fetch the currently
+  playing track.
+- **Windows** — Uses the system **media controls** (System Media Transport Controls) to drive the Spotify desktop
+  application.
 
 ## 🎮 Usage
 
@@ -69,7 +83,8 @@ After installation, you'll see a Spotify icon in your status bar at the bottom o
 ## ⚙️ Configuration
 
 No additional configuration is required. The plugin automatically detects your Spotify installation and connects to it
-through AppleScript (macOS only).
+through the appropriate platform integration — **AppleScript on macOS**, **MPRIS2 over D-Bus on Linux**, and the
+**system media controls on Windows**.
 
 ## 🔧 Development
 
