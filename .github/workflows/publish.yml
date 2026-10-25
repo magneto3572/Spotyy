@@ -3,7 +3,7 @@ name: Publish to JetBrains Marketplace
 on:
   push:
     tags:
-      - '*'   # triggers on any tag, e.g. 0.0.5
+      - '[0-9]+.[0-9]+.[0-9]+'   # plain version tags, e.g. 0.0.5 (vscode-* tags publish the VS Code extension)
 
 jobs:
   publish:

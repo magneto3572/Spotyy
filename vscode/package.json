@@ -1,0 +1,1114 @@
+{
+  "name": "spotyy",
+  "displayName": "Spotyy",
+  "description": "Spotify controls in your status bar, plus see what teammates on your Wi-Fi are listening to and focus together in Focus Rooms.",
+  "version": "0.0.7",
+  "publisher": "magneto3572",
+  "license": "SEE LICENSE IN LICENSE",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#121212",
+    "theme": "dark"
+  },
+  "pricing": "Free",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/magneto3572/Spotyy",
+    "directory": "vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/magneto3572/Spotyy/issues"
+  },
+  "homepage": "https://github.com/magneto3572/Spotyy/tree/main/vscode#readme",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "spotify",
+    "music",
+    "player",
+    "now playing",
+    "focus",
+    "pomodoro",
+    "team",
+    "lan"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "spotyy.playPause",
+        "title": "Play / Pause",
+        "category": "Spotyy"
+      },
+      {
+        "command": "spotyy.next",
+        "title": "Next Track",
+        "category": "Spotyy"
+      },
+      {
+        "command": "spotyy.previous",
+        "title": "Previous Track",
+        "category": "Spotyy"
+      },
+      {
+        "command": "spotyy.volumeUp",
+        "title": "Volume Up",
+        "category": "Spotyy"
+      },
+      {
+        "command": "spotyy.volumeDown",
+        "title": "Volume Down",
+        "category": "Spotyy"
+      },
+      {
+        "command": "spotyy.setVolume",
+        "title": "Set Volume…",
+        "category": "Spotyy"
+      },
+      {
+        "command": "spotyy.showPeers",
+        "title": "Show Listening Nearby",
+        "category": "Spotyy"
+      },
+      {
+        "command": "spotyy.toggleGhostMode",
+        "title": "Toggle Ghost Mode",
+        "category": "Spotyy"
+      },
+      {
+        "command": "spotyy.startFocusRoom",
+        "title": "Start Focus Room…",
+        "category": "Spotyy"
+      },
+      {
+        "command": "spotyy.leaveFocusRoom",
+        "title": "Leave Focus Room",
+        "category": "Spotyy"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "spotyy",
+          "title": "Spotyy",
+          "icon": "media/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "spotyy": [
+        {
+          "type": "webview",
+          "id": "spotyy.peers",
+          "name": "Listening Nearby"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Spotyy",
+      "properties": {
+        "spotyy.statusBar.maxTrackLength": {
+          "type": "number",
+          "default": 40,
+          "minimum": 10,
+          "description": "Maximum number of characters of the track name shown in the status bar."
+        },
+        "spotyy.statusBar.showVolume": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the volume control in the status bar."
+        }
+      }
+    },
+    "icons": {
+      "spotyy-logo": {
+        "description": "Spotyy logo",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E900"
+        }
+      },
+      "spotyy-prev": {
+        "description": "Previous track",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E901"
+        }
+      },
+      "spotyy-next": {
+        "description": "Next track",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E902"
+        }
+      },
+      "spotyy-volume": {
+        "description": "Volume",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E905"
+        }
+      },
+      "spotyy-mute": {
+        "description": "Muted",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E906"
+        }
+      },
+      "spotyy-play-dark-00": {
+        "description": "Play button, dark theme (progress 0/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E910"
+        }
+      },
+      "spotyy-play-dark-01": {
+        "description": "Play button, dark theme (progress 1/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E911"
+        }
+      },
+      "spotyy-play-dark-02": {
+        "description": "Play button, dark theme (progress 2/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E912"
+        }
+      },
+      "spotyy-play-dark-03": {
+        "description": "Play button, dark theme (progress 3/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E913"
+        }
+      },
+      "spotyy-play-dark-04": {
+        "description": "Play button, dark theme (progress 4/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E914"
+        }
+      },
+      "spotyy-play-dark-05": {
+        "description": "Play button, dark theme (progress 5/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E915"
+        }
+      },
+      "spotyy-play-dark-06": {
+        "description": "Play button, dark theme (progress 6/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E916"
+        }
+      },
+      "spotyy-play-dark-07": {
+        "description": "Play button, dark theme (progress 7/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E917"
+        }
+      },
+      "spotyy-play-dark-08": {
+        "description": "Play button, dark theme (progress 8/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E918"
+        }
+      },
+      "spotyy-play-dark-09": {
+        "description": "Play button, dark theme (progress 9/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E919"
+        }
+      },
+      "spotyy-play-dark-10": {
+        "description": "Play button, dark theme (progress 10/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E91A"
+        }
+      },
+      "spotyy-play-dark-11": {
+        "description": "Play button, dark theme (progress 11/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E91B"
+        }
+      },
+      "spotyy-play-dark-12": {
+        "description": "Play button, dark theme (progress 12/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E91C"
+        }
+      },
+      "spotyy-play-dark-13": {
+        "description": "Play button, dark theme (progress 13/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E91D"
+        }
+      },
+      "spotyy-play-dark-14": {
+        "description": "Play button, dark theme (progress 14/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E91E"
+        }
+      },
+      "spotyy-play-dark-15": {
+        "description": "Play button, dark theme (progress 15/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E91F"
+        }
+      },
+      "spotyy-play-dark-16": {
+        "description": "Play button, dark theme (progress 16/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E920"
+        }
+      },
+      "spotyy-play-dark-17": {
+        "description": "Play button, dark theme (progress 17/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E921"
+        }
+      },
+      "spotyy-play-dark-18": {
+        "description": "Play button, dark theme (progress 18/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E922"
+        }
+      },
+      "spotyy-play-dark-19": {
+        "description": "Play button, dark theme (progress 19/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E923"
+        }
+      },
+      "spotyy-play-dark-20": {
+        "description": "Play button, dark theme (progress 20/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E924"
+        }
+      },
+      "spotyy-play-dark-21": {
+        "description": "Play button, dark theme (progress 21/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E925"
+        }
+      },
+      "spotyy-play-dark-22": {
+        "description": "Play button, dark theme (progress 22/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E926"
+        }
+      },
+      "spotyy-play-dark-23": {
+        "description": "Play button, dark theme (progress 23/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E927"
+        }
+      },
+      "spotyy-play-dark-24": {
+        "description": "Play button, dark theme (progress 24/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E928"
+        }
+      },
+      "spotyy-play-dark-25": {
+        "description": "Play button, dark theme (progress 25/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E929"
+        }
+      },
+      "spotyy-play-dark-26": {
+        "description": "Play button, dark theme (progress 26/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E92A"
+        }
+      },
+      "spotyy-play-dark-27": {
+        "description": "Play button, dark theme (progress 27/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E92B"
+        }
+      },
+      "spotyy-play-dark-28": {
+        "description": "Play button, dark theme (progress 28/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E92C"
+        }
+      },
+      "spotyy-play-dark-29": {
+        "description": "Play button, dark theme (progress 29/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E92D"
+        }
+      },
+      "spotyy-play-dark-30": {
+        "description": "Play button, dark theme (progress 30/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E92E"
+        }
+      },
+      "spotyy-play-dark-31": {
+        "description": "Play button, dark theme (progress 31/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E92F"
+        }
+      },
+      "spotyy-play-dark-32": {
+        "description": "Play button, dark theme (progress 32/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E930"
+        }
+      },
+      "spotyy-pause-dark-00": {
+        "description": "Pause button, dark theme (progress 0/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E940"
+        }
+      },
+      "spotyy-pause-dark-01": {
+        "description": "Pause button, dark theme (progress 1/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E941"
+        }
+      },
+      "spotyy-pause-dark-02": {
+        "description": "Pause button, dark theme (progress 2/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E942"
+        }
+      },
+      "spotyy-pause-dark-03": {
+        "description": "Pause button, dark theme (progress 3/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E943"
+        }
+      },
+      "spotyy-pause-dark-04": {
+        "description": "Pause button, dark theme (progress 4/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E944"
+        }
+      },
+      "spotyy-pause-dark-05": {
+        "description": "Pause button, dark theme (progress 5/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E945"
+        }
+      },
+      "spotyy-pause-dark-06": {
+        "description": "Pause button, dark theme (progress 6/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E946"
+        }
+      },
+      "spotyy-pause-dark-07": {
+        "description": "Pause button, dark theme (progress 7/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E947"
+        }
+      },
+      "spotyy-pause-dark-08": {
+        "description": "Pause button, dark theme (progress 8/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E948"
+        }
+      },
+      "spotyy-pause-dark-09": {
+        "description": "Pause button, dark theme (progress 9/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E949"
+        }
+      },
+      "spotyy-pause-dark-10": {
+        "description": "Pause button, dark theme (progress 10/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E94A"
+        }
+      },
+      "spotyy-pause-dark-11": {
+        "description": "Pause button, dark theme (progress 11/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E94B"
+        }
+      },
+      "spotyy-pause-dark-12": {
+        "description": "Pause button, dark theme (progress 12/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E94C"
+        }
+      },
+      "spotyy-pause-dark-13": {
+        "description": "Pause button, dark theme (progress 13/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E94D"
+        }
+      },
+      "spotyy-pause-dark-14": {
+        "description": "Pause button, dark theme (progress 14/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E94E"
+        }
+      },
+      "spotyy-pause-dark-15": {
+        "description": "Pause button, dark theme (progress 15/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E94F"
+        }
+      },
+      "spotyy-pause-dark-16": {
+        "description": "Pause button, dark theme (progress 16/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E950"
+        }
+      },
+      "spotyy-pause-dark-17": {
+        "description": "Pause button, dark theme (progress 17/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E951"
+        }
+      },
+      "spotyy-pause-dark-18": {
+        "description": "Pause button, dark theme (progress 18/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E952"
+        }
+      },
+      "spotyy-pause-dark-19": {
+        "description": "Pause button, dark theme (progress 19/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E953"
+        }
+      },
+      "spotyy-pause-dark-20": {
+        "description": "Pause button, dark theme (progress 20/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E954"
+        }
+      },
+      "spotyy-pause-dark-21": {
+        "description": "Pause button, dark theme (progress 21/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E955"
+        }
+      },
+      "spotyy-pause-dark-22": {
+        "description": "Pause button, dark theme (progress 22/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E956"
+        }
+      },
+      "spotyy-pause-dark-23": {
+        "description": "Pause button, dark theme (progress 23/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E957"
+        }
+      },
+      "spotyy-pause-dark-24": {
+        "description": "Pause button, dark theme (progress 24/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E958"
+        }
+      },
+      "spotyy-pause-dark-25": {
+        "description": "Pause button, dark theme (progress 25/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E959"
+        }
+      },
+      "spotyy-pause-dark-26": {
+        "description": "Pause button, dark theme (progress 26/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E95A"
+        }
+      },
+      "spotyy-pause-dark-27": {
+        "description": "Pause button, dark theme (progress 27/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E95B"
+        }
+      },
+      "spotyy-pause-dark-28": {
+        "description": "Pause button, dark theme (progress 28/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E95C"
+        }
+      },
+      "spotyy-pause-dark-29": {
+        "description": "Pause button, dark theme (progress 29/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E95D"
+        }
+      },
+      "spotyy-pause-dark-30": {
+        "description": "Pause button, dark theme (progress 30/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E95E"
+        }
+      },
+      "spotyy-pause-dark-31": {
+        "description": "Pause button, dark theme (progress 31/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E95F"
+        }
+      },
+      "spotyy-pause-dark-32": {
+        "description": "Pause button, dark theme (progress 32/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E960"
+        }
+      },
+      "spotyy-play-light-00": {
+        "description": "Play button, light theme (progress 0/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E970"
+        }
+      },
+      "spotyy-play-light-01": {
+        "description": "Play button, light theme (progress 1/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E971"
+        }
+      },
+      "spotyy-play-light-02": {
+        "description": "Play button, light theme (progress 2/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E972"
+        }
+      },
+      "spotyy-play-light-03": {
+        "description": "Play button, light theme (progress 3/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E973"
+        }
+      },
+      "spotyy-play-light-04": {
+        "description": "Play button, light theme (progress 4/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E974"
+        }
+      },
+      "spotyy-play-light-05": {
+        "description": "Play button, light theme (progress 5/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E975"
+        }
+      },
+      "spotyy-play-light-06": {
+        "description": "Play button, light theme (progress 6/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E976"
+        }
+      },
+      "spotyy-play-light-07": {
+        "description": "Play button, light theme (progress 7/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E977"
+        }
+      },
+      "spotyy-play-light-08": {
+        "description": "Play button, light theme (progress 8/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E978"
+        }
+      },
+      "spotyy-play-light-09": {
+        "description": "Play button, light theme (progress 9/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E979"
+        }
+      },
+      "spotyy-play-light-10": {
+        "description": "Play button, light theme (progress 10/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E97A"
+        }
+      },
+      "spotyy-play-light-11": {
+        "description": "Play button, light theme (progress 11/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E97B"
+        }
+      },
+      "spotyy-play-light-12": {
+        "description": "Play button, light theme (progress 12/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E97C"
+        }
+      },
+      "spotyy-play-light-13": {
+        "description": "Play button, light theme (progress 13/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E97D"
+        }
+      },
+      "spotyy-play-light-14": {
+        "description": "Play button, light theme (progress 14/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E97E"
+        }
+      },
+      "spotyy-play-light-15": {
+        "description": "Play button, light theme (progress 15/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E97F"
+        }
+      },
+      "spotyy-play-light-16": {
+        "description": "Play button, light theme (progress 16/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E980"
+        }
+      },
+      "spotyy-play-light-17": {
+        "description": "Play button, light theme (progress 17/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E981"
+        }
+      },
+      "spotyy-play-light-18": {
+        "description": "Play button, light theme (progress 18/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E982"
+        }
+      },
+      "spotyy-play-light-19": {
+        "description": "Play button, light theme (progress 19/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E983"
+        }
+      },
+      "spotyy-play-light-20": {
+        "description": "Play button, light theme (progress 20/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E984"
+        }
+      },
+      "spotyy-play-light-21": {
+        "description": "Play button, light theme (progress 21/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E985"
+        }
+      },
+      "spotyy-play-light-22": {
+        "description": "Play button, light theme (progress 22/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E986"
+        }
+      },
+      "spotyy-play-light-23": {
+        "description": "Play button, light theme (progress 23/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E987"
+        }
+      },
+      "spotyy-play-light-24": {
+        "description": "Play button, light theme (progress 24/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E988"
+        }
+      },
+      "spotyy-play-light-25": {
+        "description": "Play button, light theme (progress 25/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E989"
+        }
+      },
+      "spotyy-play-light-26": {
+        "description": "Play button, light theme (progress 26/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E98A"
+        }
+      },
+      "spotyy-play-light-27": {
+        "description": "Play button, light theme (progress 27/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E98B"
+        }
+      },
+      "spotyy-play-light-28": {
+        "description": "Play button, light theme (progress 28/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E98C"
+        }
+      },
+      "spotyy-play-light-29": {
+        "description": "Play button, light theme (progress 29/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E98D"
+        }
+      },
+      "spotyy-play-light-30": {
+        "description": "Play button, light theme (progress 30/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E98E"
+        }
+      },
+      "spotyy-play-light-31": {
+        "description": "Play button, light theme (progress 31/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E98F"
+        }
+      },
+      "spotyy-play-light-32": {
+        "description": "Play button, light theme (progress 32/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E990"
+        }
+      },
+      "spotyy-pause-light-00": {
+        "description": "Pause button, light theme (progress 0/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9A0"
+        }
+      },
+      "spotyy-pause-light-01": {
+        "description": "Pause button, light theme (progress 1/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9A1"
+        }
+      },
+      "spotyy-pause-light-02": {
+        "description": "Pause button, light theme (progress 2/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9A2"
+        }
+      },
+      "spotyy-pause-light-03": {
+        "description": "Pause button, light theme (progress 3/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9A3"
+        }
+      },
+      "spotyy-pause-light-04": {
+        "description": "Pause button, light theme (progress 4/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9A4"
+        }
+      },
+      "spotyy-pause-light-05": {
+        "description": "Pause button, light theme (progress 5/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9A5"
+        }
+      },
+      "spotyy-pause-light-06": {
+        "description": "Pause button, light theme (progress 6/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9A6"
+        }
+      },
+      "spotyy-pause-light-07": {
+        "description": "Pause button, light theme (progress 7/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9A7"
+        }
+      },
+      "spotyy-pause-light-08": {
+        "description": "Pause button, light theme (progress 8/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9A8"
+        }
+      },
+      "spotyy-pause-light-09": {
+        "description": "Pause button, light theme (progress 9/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9A9"
+        }
+      },
+      "spotyy-pause-light-10": {
+        "description": "Pause button, light theme (progress 10/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9AA"
+        }
+      },
+      "spotyy-pause-light-11": {
+        "description": "Pause button, light theme (progress 11/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9AB"
+        }
+      },
+      "spotyy-pause-light-12": {
+        "description": "Pause button, light theme (progress 12/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9AC"
+        }
+      },
+      "spotyy-pause-light-13": {
+        "description": "Pause button, light theme (progress 13/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9AD"
+        }
+      },
+      "spotyy-pause-light-14": {
+        "description": "Pause button, light theme (progress 14/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9AE"
+        }
+      },
+      "spotyy-pause-light-15": {
+        "description": "Pause button, light theme (progress 15/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9AF"
+        }
+      },
+      "spotyy-pause-light-16": {
+        "description": "Pause button, light theme (progress 16/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9B0"
+        }
+      },
+      "spotyy-pause-light-17": {
+        "description": "Pause button, light theme (progress 17/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9B1"
+        }
+      },
+      "spotyy-pause-light-18": {
+        "description": "Pause button, light theme (progress 18/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9B2"
+        }
+      },
+      "spotyy-pause-light-19": {
+        "description": "Pause button, light theme (progress 19/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9B3"
+        }
+      },
+      "spotyy-pause-light-20": {
+        "description": "Pause button, light theme (progress 20/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9B4"
+        }
+      },
+      "spotyy-pause-light-21": {
+        "description": "Pause button, light theme (progress 21/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9B5"
+        }
+      },
+      "spotyy-pause-light-22": {
+        "description": "Pause button, light theme (progress 22/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9B6"
+        }
+      },
+      "spotyy-pause-light-23": {
+        "description": "Pause button, light theme (progress 23/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9B7"
+        }
+      },
+      "spotyy-pause-light-24": {
+        "description": "Pause button, light theme (progress 24/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9B8"
+        }
+      },
+      "spotyy-pause-light-25": {
+        "description": "Pause button, light theme (progress 25/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9B9"
+        }
+      },
+      "spotyy-pause-light-26": {
+        "description": "Pause button, light theme (progress 26/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9BA"
+        }
+      },
+      "spotyy-pause-light-27": {
+        "description": "Pause button, light theme (progress 27/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9BB"
+        }
+      },
+      "spotyy-pause-light-28": {
+        "description": "Pause button, light theme (progress 28/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9BC"
+        }
+      },
+      "spotyy-pause-light-29": {
+        "description": "Pause button, light theme (progress 29/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9BD"
+        }
+      },
+      "spotyy-pause-light-30": {
+        "description": "Pause button, light theme (progress 30/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9BE"
+        }
+      },
+      "spotyy-pause-light-31": {
+        "description": "Pause button, light theme (progress 31/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9BF"
+        }
+      },
+      "spotyy-pause-light-32": {
+        "description": "Pause button, light theme (progress 32/32)",
+        "default": {
+          "fontPath": "./media/spotyy-icons.woff",
+          "fontCharacter": "\\E9C0"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build -- --production",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test \"out-test/test/*.test.js\"",
+    "package": "vsce package --no-dependencies --baseContentUrl https://github.com/magneto3572/Spotyy/blob/main/vscode/ --baseImagesUrl https://raw.githubusercontent.com/magneto3572/Spotyy/main/vscode/",
+    "publish:vsce": "vsce publish --no-dependencies --baseContentUrl https://github.com/magneto3572/Spotyy/blob/main/vscode/ --baseImagesUrl https://raw.githubusercontent.com/magneto3572/Spotyy/main/vscode/",
+    "publish:ovsx": "ovsx publish --no-dependencies",
+    "icons": "python3 scripts/gen-icons.py"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "~1.75.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "ovsx": "^0.10.0",
+    "typescript": "^5.6.0"
+  }
+}

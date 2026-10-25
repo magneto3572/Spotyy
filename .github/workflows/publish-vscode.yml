@@ -1,0 +1,64 @@
+name: Publish VS Code extension
+
+on:
+  push:
+    tags:
+      - 'vscode-*'   # e.g. vscode-0.0.7 (must match vscode/package.json version)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to create GitHub Release
+    env:
+      # Job-level so the publish steps' `if` can see them; each publish step is skipped
+      # when its secret isn't set (no VSCE_PAT → upload the release .vsix by hand at
+      # https://marketplace.visualstudio.com/manage/publishers/magneto3572)
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    defaults:
+      run:
+        working-directory: vscode
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+
+      - name: Check tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#vscode-}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match vscode/package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck and run tests
+        run: npm run typecheck && npm test
+
+      - name: Package extension
+        run: npm run package
+
+      - name: Publish to VS Code Marketplace
+        if: ${{ env.VSCE_PAT != '' }}
+        run: npx vsce publish --no-dependencies --packagePath spotyy-*.vsix
+
+      # Open VSX serves Cursor, Windsurf and VSCodium — skipped until the OVSX_PAT secret exists
+      - name: Publish to Open VSX
+        if: ${{ env.OVSX_PAT != '' }}
+        run: npx ovsx publish spotyy-*.vsix
+
+      - name: Upload extension as GitHub Release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Spotyy for VS Code ${{ github.ref_name }}
+          files: vscode/spotyy-*.vsix

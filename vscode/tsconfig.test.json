@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "outDir": "out-test", "sourceMap": false },
+  "include": ["src/test", "src/network.ts", "src/focusRoom.ts", "src/store.ts", "src/protocol.ts", "src/spotify"]
+}

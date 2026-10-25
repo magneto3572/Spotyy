@@ -197,3 +197,34 @@ All platform services implement `SpotifyService` and are created by `SpotifyServ
 - **Repo:** `magneto3572/Spotyy`
 - **Release convention:** tag = version string (e.g. `0.0.4`), asset = `Spotyy-0.0.4.zip`
 - **Marketplace upload:** use the zip from the GitHub release assets page
+
+**Automated publishing** (GitHub Actions, triggered by pushing a tag):
+
+| Tag | Workflow | Publishes | Secrets |
+|---|---|---|---|
+| `0.0.7` (plain version) | `.github/workflows/publish.yml` | JetBrains Marketplace + release zip | `PUBLISH_TOKEN` |
+| `vscode-0.0.7` | `.github/workflows/publish-vscode.yml` | Release `.vsix`; Open VSX if `OVSX_PAT` set; VS Code Marketplace if `VSCE_PAT` set | `OVSX_PAT`, `VSCE_PAT` (both optional) |
+
+The VS Code workflow fails if the tag doesn't match `vscode/package.json` `version`. No `VSCE_PAT` is configured (Azure DevOps now requires an Azure subscription to issue one), so the VS Code Marketplace release is a manual upload of the release `.vsix` at https://marketplace.visualstudio.com/manage/publishers/magneto3572.
+
+---
+
+## VS Code Extension (`vscode/`)
+
+TypeScript port of the plugin for VS Code and forks (Cursor, Windsurf, VSCodium). **Wire-compatible** with the JetBrains plugin — any change to packet formats must be made on both sides.
+
+| Kotlin | TypeScript |
+|---|---|
+| `SpotifyMacService` / `SpotifyLinuxService` | `src/spotify/mac.ts` / `linux.ts` (async, `execFile` with 3s timeout) |
+| `NetworkDiscoveryService` | `src/network.ts` (Node `dgram`, `reuseAddr`) |
+| `FocusRoomService` | `src/focusRoom.ts` |
+| `MyStatusBarWidget` | `src/statusBar.ts` (status bar items) + `src/peersView.ts` / `media/peers.{js,css}` (sidebar webview) |
+| `PropertiesComponent` | `context.globalState` via `KeyValueStore` (`src/store.ts`) |
+
+```bash
+cd vscode
+npm run typecheck && npm test   # node:test protocol tests, no real sockets
+npm run build                   # esbuild → dist/extension.js
+npm run package                 # → spotyy-<version>.vsix
+```
+`network.ts` / `focusRoom.ts` must not import `vscode` (they're unit-tested under plain Node). Webview renders untrusted peer data with `textContent` only.
