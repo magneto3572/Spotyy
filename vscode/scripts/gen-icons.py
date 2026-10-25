@@ -53,7 +53,9 @@ C = 500
 RING = (385, 500)        # track + progress band (~3 px: reads as bold as JetBrains' 2 px stroke at 1x)
 BACKDROP_R = 385         # faceBg disc behind everything (shows as the thin dark gap)
 DISC_R = 355             # the play/pause icon's circle
-RING_SCALE = 1.6         # drawn larger than the em so the button fills the status bar height
+RING_SCALE = 1.22        # button diameter in ems: ~19.5 px at the status bar's 16 px icon size,
+                         # inside its 22 px height so no side is clipped
+RING_LIFT = 0            # SVG units to move the button up so it centres on the bar (set from measurement)
 
 # CPAL palettes: index → RGBA
 PALETTE = {
@@ -95,7 +97,7 @@ PLAY = poly([(-90, -180), (-90, 180), (190, 0)], K)
 PAUSE = poly([(-120, -160), (-120, 160), (-40, 160), (-40, -160)], K) + \
         poly([(40, -160), (40, 160), (120, 160), (120, -160)], K)
 
-RING_T = Transform().translate(C, C).scale(RING_SCALE).translate(-C, -C)
+RING_T = Transform().translate(C, C - RING_LIFT).scale(RING_SCALE).translate(-C, -C)
 
 
 def to_font(t):

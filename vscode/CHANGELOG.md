@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.8
+- Play/pause button fits fully inside the status bar at every display scale — the progress ring is no longer clipped at the top or bottom
+- Sharper status bar screenshot on the Marketplace page
+
 ## 0.0.7
 First release for VS Code and VS Code–based editors (Cursor, Windsurf, VSCodium).
 - Spotify controls in the status bar (macOS via AppleScript, Linux via MPRIS/playerctl), styled like the JetBrains plugin: round play/pause button with a live progress ring
