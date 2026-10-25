@@ -79,7 +79,9 @@ object NetworkDiscoveryService {
         if (!recordedVibes.add(key)) return
 
         val props   = PropertiesComponent.getInstance()
-        val current = props.getValue(VIBE_COUNT_KEY, "0").toIntOrNull() ?: 0
+        // Start from 0 on a new day — the stored count belongs to the stored date
+        val current = if (props.getValue(VIBE_DATE_KEY, "") == today.toString())
+            props.getValue(VIBE_COUNT_KEY, "0").toIntOrNull() ?: 0 else 0
         props.setValue(VIBE_DATE_KEY, today.toString())
         props.setValue(VIBE_COUNT_KEY, (current + 1).toString())
     }

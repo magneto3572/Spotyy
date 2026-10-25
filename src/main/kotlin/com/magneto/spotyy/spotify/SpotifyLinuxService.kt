@@ -50,12 +50,17 @@ class SpotifyLinuxService : SpotifyService {
             logger.warn("Spotify did not start within 20 seconds")
             return
         }
-        // Extra delay for D-Bus/playerctl interface to register after the process appears
-        Thread.sleep(1000)
-        if (hasPlayerctl) {
-            runCommand(listOf("playerctl", "--player=spotify", "play"))
-        } else {
-            dbusSend("org.mpris.MediaPlayer2.Player.Play")
+        // The D-Bus/playerctl interface registers after the process appears, and a slow cold
+        // start can ignore the first Play — retry until Spotify reports Playing (up to ~10 s)
+        repeat(10) {
+            Thread.sleep(1000)
+            if (hasPlayerctl) {
+                runCommand(listOf("playerctl", "--player=spotify", "play"))
+            } else {
+                dbusSend("org.mpris.MediaPlayer2.Player.Play")
+            }
+            Thread.sleep(300)
+            if (getPlaybackStatus() == "Playing") return
         }
     }
 

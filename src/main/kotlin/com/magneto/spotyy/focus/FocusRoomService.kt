@@ -116,8 +116,9 @@ object FocusRoomService {
         send("JOIN", room)
     }
 
+    /** Guests send LEAVE; the host sends END so the room closes for everyone ("End Room"). */
     fun leaveRoom() {
-        currentRoom?.let { send("LEAVE", it) }
+        currentRoom?.let { send(if (isHost) "END" else "LEAVE", it) }
         currentRoom = null
         isHost      = false
     }

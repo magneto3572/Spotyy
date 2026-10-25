@@ -54,10 +54,14 @@ intellijPlatform {
 
     pluginVerification {
         ides {
-            // Pin concrete, published builds: the sinceBuild floor (231 / 2023.1)
-            // and the platform the plugin compiles against (2024.2.5).
+            // Pin concrete, published builds: the sinceBuild floor (231 / 2023.1),
+            // the platform the plugin compiles against (2024.2.5), the last Community
+            // release (2025.2), and the newest unified IntelliJ IDEA releases.
             ide(IntelliJPlatformType.IntellijIdeaCommunity, "2023.1")
             ide(IntelliJPlatformType.IntellijIdeaCommunity, "2024.2.5")
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.4")
+            ide(IntelliJPlatformType.IntellijIdeaUltimate, "2026.1.5")
+            ide(IntelliJPlatformType.IntellijIdeaUltimate, "2026.2.3")
         }
     }
 }

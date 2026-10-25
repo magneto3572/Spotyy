@@ -91,6 +91,15 @@
     ]]></description>
 
     <change-notes><![CDATA[
+      <h2>0.0.7</h2>
+      <p><b>Spotyy for VS Code</b> — Spotyy is now also available for VS Code, Cursor, Windsurf and VSCodium. Both plugins speak the same protocol, so JetBrains and VS Code users on the same network see each other and share Focus Rooms.</p>
+      <ul>
+        <li><b>End Room closes the room for everyone</b> — when the host ends a Focus Room, all members now leave it immediately; previously guests stayed in the room until its timer expired</li>
+        <li><b>Reliable auto-launch on Linux</b> — pressing play while Spotify is closed now keeps retrying until playback actually starts, so a slow Spotify start no longer leaves it paused</li>
+        <li><b>Daily vibe-match count</b> — the "vibe matches today" counter now correctly starts from zero each day</li>
+        <li><b>Verified compatibility</b> — checked with the JetBrains Plugin Verifier against IntelliJ IDEA 2023.1 through 2026.2</li>
+      </ul>
+
       <h2>0.0.6</h2>
       <p><b>Windows support</b> — Spotyy now runs on all three major desktop platforms: macOS, Linux, and Windows.</p>
       <ul>

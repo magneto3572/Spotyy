@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Platform:** macOS (AppleScript), Linux (D-Bus / MPRIS2), Windows 10 1903+ (SMTC + WASAPI)
 - **Plugin ID:** `com.github.magneto3572.spotyy`
-- **Current version:** `0.0.6` (in `gradle.properties`)
+- **Current version:** `0.0.7` (in `gradle.properties`)
 - **Supported IDEs:** IntelliJ 2022.3+ (`pluginSinceBuild = 231`), Android Studio Giraffe+, all JetBrains IDEs
 - **Build tool:** Gradle + IntelliJ Platform Gradle Plugin (JDK 17)
 
